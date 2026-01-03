@@ -27,6 +27,12 @@
 #include "queue.h"
 GCodeQueue queue;
 
+// Initialize deferred OK queue
+GCodeQueue::RingBuffer::DeferredOk GCodeQueue::RingBuffer::deferred_ok[8] = {};
+uint8_t GCodeQueue::RingBuffer::deferred_ok_head = 0;
+uint8_t GCodeQueue::RingBuffer::deferred_ok_tail = 0;
+uint8_t GCodeQueue::RingBuffer::deferred_ok_count = 0;
+
 #include "gcode.h"
 
 #include "../lcd/marlinui.h"
@@ -624,6 +630,34 @@ void GCodeQueue::exhaust() {
  */
 void GCodeQueue::advance() {
 
+  // If there are deferred OKs waiting and there are no planned moves, send them now
+  if (ring_buffer.deferred_ok_count && planner.movesplanned() == 0) {
+    long N = -1;
+    #if HAS_MULTI_SERIAL
+      serial_index_t port;
+      if (ring_buffer.pop_deferred_ok(port, N)) {
+        if (!port.valid()) PORT_REDIRECT(SerialMask::All); else PORT_REDIRECT(SERIAL_PORTMASK(port));
+      }
+    #else
+      if (ring_buffer.pop_deferred_ok(N)) {
+        PORT_REDIRECT(SerialMask::All);
+      }
+    #endif
+
+    // If we popped an entry, send OK
+    if (N != -1) {
+      SERIAL_ECHOPGM(STR_OK);
+      #if ENABLED(ADVANCED_OK)
+        if (N > 0) {
+          SERIAL_CHAR(' ');
+          SERIAL_ECHO(N);
+        }
+        SERIAL_ECHOPGM_P(SP_P_STR, planner.moves_free(), SP_B_STR, BUFSIZE - ring_buffer.length);
+      #endif
+      SERIAL_EOL();
+    }
+  }
+
   // Process immediate commands
   if (process_injected_command_P() || process_injected_command()) return;
 
@@ -719,7 +753,7 @@ void GCodeQueue::advance() {
 
     if (queue.auto_buffer_report_interval && ELAPSED(ms, queue.next_buffer_report_ms)) {
       queue.next_buffer_report_ms = ms + 1000UL * queue.auto_buffer_report_interval;
-      PORT_REDIRECT(SERIAL_BOTH);
+      PORT_REDIRECT(SerialMask::All);
       report_buffer_statistics();
       PORT_RESTORE();
     }

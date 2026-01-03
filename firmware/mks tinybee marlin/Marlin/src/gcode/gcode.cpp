@@ -1119,7 +1119,24 @@ void GcodeSuite::process_next_command() {
 
   // Parse the next command in the queue
   parser.parse(command.buffer);
-  process_parsed_command();
+
+  // If this is a movement command (G0/G1), defer sending "ok" until motion completes
+  if (parser.command_letter == 'G' && (parser.codenum == 0 || parser.codenum == 1)) {
+    // Record the serial port and line number for a deferred OK
+    #if HAS_MULTI_SERIAL
+      const serial_index_t port = queue.ring_buffer.command_port();
+      const long N = GCodeQueue::serial_state[port.index].last_N;
+      queue.ring_buffer.peek_next_command().skip_ok = true;
+      queue.ring_buffer.push_deferred_ok(port, N);
+    #else
+      const long N = GCodeQueue::serial_state[0].last_N;
+      queue.ring_buffer.peek_next_command().skip_ok = true;
+      queue.ring_buffer.push_deferred_ok(N);
+    #endif
+    process_parsed_command(true); // Process without sending "ok"
+  }
+  else
+    process_parsed_command();
 }
 
 /**

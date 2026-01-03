@@ -98,6 +98,54 @@ public:
     inline CommandLine& peek_next_command() { return commands[index_r]; }
 
     inline char* peek_next_command_string() { return peek_next_command().buffer; }
+
+    // Deferred OK queue for commands that should send OK only after motion completes
+    struct DeferredOk {
+      #if HAS_MULTI_SERIAL
+        serial_index_t port;
+      #endif
+      long N;
+    };
+    static DeferredOk deferred_ok[8];
+    static uint8_t deferred_ok_head;
+    static uint8_t deferred_ok_tail;
+    static uint8_t deferred_ok_count; 
+
+#if HAS_MULTI_SERIAL
+    static inline void push_deferred_ok(serial_index_t port, long N) {
+      if (deferred_ok_count < 8) {
+        deferred_ok[deferred_ok_tail].N = N;
+        deferred_ok[deferred_ok_tail].port = port;
+        if (++deferred_ok_tail >= 8) deferred_ok_tail = 0;
+        ++deferred_ok_count;
+      }
+    }
+
+    static inline bool pop_deferred_ok(serial_index_t &port, long &N) {
+      if (!deferred_ok_count) return false;
+      N = deferred_ok[deferred_ok_head].N;
+      port = deferred_ok[deferred_ok_head].port;
+      if (++deferred_ok_head >= 8) deferred_ok_head = 0;
+      --deferred_ok_count;
+      return true;
+    }
+#else
+    static inline void push_deferred_ok(long N) {
+      if (deferred_ok_count < 8) {
+        deferred_ok[deferred_ok_tail].N = N;
+        if (++deferred_ok_tail >= 8) deferred_ok_tail = 0;
+        ++deferred_ok_count;
+      }
+    }
+
+    static inline bool pop_deferred_ok(long &N) {
+      if (!deferred_ok_count) return false;
+      N = deferred_ok[deferred_ok_head].N;
+      if (++deferred_ok_head >= 8) deferred_ok_head = 0;
+      --deferred_ok_count;
+      return true;
+    }
+#endif
   };
 
   /**
@@ -108,7 +156,7 @@ public:
   /**
    * Clear the Marlin command queue
    */
-  static void clear() { ring_buffer.clear(); }
+  static void clear() { ring_buffer.clear(); ring_buffer.deferred_ok_count = 0; ring_buffer.deferred_ok_head = ring_buffer.deferred_ok_tail = 0; }
 
   /**
    * Next Injected Command (PROGMEM) pointer. (nullptr == empty)
