@@ -123,7 +123,7 @@
  * Currently Ethernet (-2) is only supported on Teensy 4.1 boards.
  * :[-2, -1, 0, 1, 2, 3, 4, 5, 6, 7]
  */
-#define SERIAL_PORT_2 -1
+#define SERIAL_PORT_2 2 //-1 for wireless wifi
 #define BAUDRATE_2 115200   // Enable to override BAUDRATE
 
 /**
@@ -2426,7 +2426,7 @@
 // MKS MINI12864 with graphic controller and SD support
 // https://reprap.org/wiki/MKS_MINI_12864
 //
-#define MKS_MINI_12864
+//#define MKS_MINI_12864
 
 //
 // MKS MINI12864 V3 is an alias for FYSETC_MINI_12864_2_1. Type A/B. NeoPixel RGB Backlight.
