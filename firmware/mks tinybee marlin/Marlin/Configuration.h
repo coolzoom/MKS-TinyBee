@@ -873,7 +873,7 @@
 //#define Z3_DRIVER_TYPE A4988
 //#define Z4_DRIVER_TYPE A4988
 #if LINEAR_AXES >= 4
-  #define I_DRIVER_TYPE  A4988   // 4th axis (A), Mecanum wheel
+  #define I_DRIVER_TYPE  A4988   // 4th axis (A), Mecanum wheel. TMC220x SW Serial not supported on ESP32.
 #endif
 //#define J_DRIVER_TYPE  A4988
 //#define K_DRIVER_TYPE  A4988
@@ -936,8 +936,14 @@
  同步带齿距一般使用的是2mm的，齿数一般为16或者20齿，可以自己数数。
  如果Z轴使丝杠的话，直接除以丝杆的导程即可。这样默认情况下可以算得：(360/ 1.8 * 16) / (2 * 20) = 80                                     
  X, Y, Z [, I [, J [, K]]], E0 [, E1[, E2...]]
- */
+ 
 // X, Y, Z [, I], E0 - with LINEAR_AXES 4 (Mecanum: I = A wheel)
+ //xy, defect mark
+ //X  X轴是导程40mm的同步带滑轨道。每毫米脉冲数=（360/1.8） * TMC2209细分（X_MICROSTEPS=16） /40 = 80
+ //Y  Y轴每毫米脉冲数=（360/1.8） * TMC2209细分（Y_MICROSTEPS=16） / 12丝杆导程 = 266.66666
+ //Z dual motor Z使用时代驱动电机设置为每圈1600脉冲，丝杆导程5mm，每毫米脉冲数= 1600 / 5  = 320
+ */
+ 
 #define DEFAULT_AXIS_STEPS_PER_UNIT   { 80, 80, 1600, 80, 400 }
 
 /**

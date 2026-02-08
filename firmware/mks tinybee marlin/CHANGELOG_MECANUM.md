@@ -131,13 +131,17 @@
 - **软限位**：在 `apply_motion_limits()` 中，若 `MECANUM_ROBOTBASE` 则直接 return，不施加任何轴限位。
 - **上电状态**：在 `setup()` 中，若 `MECANUM_ROBOTBASE`，将所有线性轴标记为“已回零”，上电后无需执行 G28 即可运动。
 
+### TMC220x 与 ESP32（TinyBee）
+- **错误**：`TMC220x Software Serial is not supported on ESP32` 来自 `HAL/ESP32/inc/SanityCheck.h`，当任一轴使用 TMC2208/2209 且为 **Software Serial** 时会触发。
+- **处理**：在 ESP32 上要么使用 **Hardware UART** 连接 TMC220x（在板级引脚中定义 `*_HARDWARE_SERIAL` 及对应 TX/RX），要么不使用 TMC220x。TinyBee 使用 I2S 步进流，板级未提供 TMC UART 引脚时，**X/Y/Z/I 驱动类型保持为 A4988**，可正常编译与运行。
+
 ---
 
 ## 8. 文件清单
 
 | 文件 | 修改类型 |
 |------|----------|
-| `Marlin/Configuration.h` | 修改：LINEAR_AXES=4、行程、I 轴、steps/feedrate/accel/homing、USE_IMIN_PLUG、BAUDRATE 250000、**I_DRIVER_TYPE A4988**（四轴时启用） |
+| `Marlin/Configuration.h` | 修改：LINEAR_AXES=4、行程、I 轴、steps/feedrate/accel/homing、USE_IMIN_PLUG、BAUDRATE 250000、**X/Y/Z/I_DRIVER_TYPE A4988**（ESP32 不支持 TMC220x 软件串口） |
 | `Marlin/Configuration_adv.h` | 修改：HOMING_BUMP_MM、HOMING_BUMP_DIVISOR、AXIS_RELATIVE_MODES |
 | `Marlin/src/pins/esp32/pins_MKS_TINYBEE.h` | 修改：I 轴引脚及 I_MIN_PIN/I_MAX_PIN=-1 |
 | `Marlin/src/feature/mecanum_robotbase.h` | 新增 |
