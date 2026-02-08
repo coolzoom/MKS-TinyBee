@@ -214,6 +214,14 @@ void GcodeSuite::G28() {
   DEBUG_SECTION(log_G28, "G28", DEBUGGING(LEVELING));
   if (DEBUGGING(LEVELING)) log_machine_info();
 
+  #if ENABLED(MECANUM_ROBOTBASE)
+    // Mecanum wheel mode: no physical homing, no limits. Treat current position as origin.
+    LOOP_LINEAR_AXES(a) set_axis_is_at_home((AxisEnum)a);
+    sync_plan_position();
+    report_current_position();
+    return;
+  #endif
+
   TERN_(LASER_MOVE_G28_OFF, cutter.set_inline_enabled(false));  // turn off laser
 
   TERN_(FULL_REPORT_TO_HOST_FEATURE, set_and_report_grblstate(M_HOMING));

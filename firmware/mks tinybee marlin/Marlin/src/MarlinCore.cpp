@@ -1317,6 +1317,10 @@ void setup() {
 
   sync_plan_position();               // Vital to init stepper/planner equivalent for current_position
 
+  #if ENABLED(MECANUM_ROBOTBASE)
+    LOOP_LINEAR_AXES(a) set_axis_is_at_home((AxisEnum)a);  // No homing: treat current position as origin
+  #endif
+
   SETUP_RUN(thermalManager.init());   // Initialize temperature loop
 
   SETUP_RUN(print_job_timer.init());  // Initial setup of print job timer

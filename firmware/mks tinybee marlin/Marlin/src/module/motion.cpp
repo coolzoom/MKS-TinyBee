@@ -785,6 +785,10 @@ void restore_feedrate_and_scaling() {
    */
   void apply_motion_limits(xyz_pos_t &target) {
 
+    #if ENABLED(MECANUM_ROBOTBASE)
+      return;  // No limits in Mecanum wheel mode
+    #endif
+
     if (!soft_endstop._enabled) return;
 
     #if IS_KINEMATIC
