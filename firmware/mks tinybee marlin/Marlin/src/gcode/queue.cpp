@@ -63,6 +63,10 @@ uint8_t GCodeQueue::RingBuffer::deferred_ok_count = 0;
   #include "../feature/repeat.h"
 #endif
 
+#if ENABLED(MECANUM_ROBOTBASE)
+  #include "../feature/mecanum_robotbase.h"
+#endif
+
 // Frequently used G-code strings
 PGMSTR(G28_STR, "G28");
 
@@ -461,6 +465,11 @@ void GCodeQueue::get_serial_commands() {
         char* command = serial.line_buffer;
 
         while (*command == ' ') command++;                   // Skip leading spaces
+
+        #if ENABLED(MECANUM_ROBOTBASE)
+          if (process_robotbase_command(command)) continue;  // Robotbase protocol: handled, do not enqueue
+        #endif
+
         char *npos = (*command == 'N') ? command : nullptr;  // Require the N parameter to start the line
 
         if (npos) {

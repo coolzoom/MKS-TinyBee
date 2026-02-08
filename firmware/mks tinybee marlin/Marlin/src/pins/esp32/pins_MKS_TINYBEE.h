@@ -88,6 +88,16 @@
 #define E1_DIR_PIN                           142
 #define E1_ENABLE_PIN                        140
 
+#if ENABLED(MECANUM_ROBOTBASE)
+  // 4th axis (A) for Mecanum wheel: use E1 driver as wheel 4
+  #define I_STEP_PIN                          141
+  #define I_DIR_PIN                           142
+  #define I_ENABLE_PIN                        140
+  // No physical I endstop on robot base; use -1 so homing I is skipped
+  #define I_MIN_PIN                           -1
+  #define I_MAX_PIN                           -1
+#endif
+
 #define Z2_STEP_PIN                          141
 #define Z2_DIR_PIN                           142
 #define Z2_ENABLE_PIN                        140
