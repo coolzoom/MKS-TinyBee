@@ -126,16 +126,24 @@
 - **BAUDRATE**：由 115200 改为 **250000**（Configuration.h）。
 - **BAUDRATE_2**：由 115200 改为 **250000**（第二串口）。
 
+### 麦克纳姆模式下不执行回零、不设限位
+- **G28（回零）**：在 `MECANUM_ROBOTBASE` 下，G28 不执行任何物理回零动作；仅将当前逻辑位置视为原点（`set_axis_is_at_home`），同步规划器后直接返回。
+- **软限位**：在 `apply_motion_limits()` 中，若 `MECANUM_ROBOTBASE` 则直接 return，不施加任何轴限位。
+- **上电状态**：在 `setup()` 中，若 `MECANUM_ROBOTBASE`，将所有线性轴标记为“已回零”，上电后无需执行 G28 即可运动。
+
 ---
 
 ## 8. 文件清单
 
 | 文件 | 修改类型 |
 |------|----------|
-| `Marlin/Configuration.h` | 修改：LINEAR_AXES=4、行程、I 轴、steps/feedrate/accel/homing、USE_IMIN_PLUG、BAUDRATE 250000 |
+| `Marlin/Configuration.h` | 修改：LINEAR_AXES=4、行程、I 轴、steps/feedrate/accel/homing、USE_IMIN_PLUG、BAUDRATE 250000、**I_DRIVER_TYPE A4988**（四轴时启用） |
 | `Marlin/Configuration_adv.h` | 修改：HOMING_BUMP_MM、HOMING_BUMP_DIVISOR、AXIS_RELATIVE_MODES |
 | `Marlin/src/pins/esp32/pins_MKS_TINYBEE.h` | 修改：I 轴引脚及 I_MIN_PIN/I_MAX_PIN=-1 |
 | `Marlin/src/feature/mecanum_robotbase.h` | 新增 |
 | `Marlin/src/feature/mecanum_robotbase.cpp` | 新增 |
 | `Marlin/src/gcode/queue.cpp` | 修改：包含头文件并调用 process_robotbase_command |
+| `Marlin/src/gcode/calibrate/G28.cpp` | 修改：MECANUM 下 G28 不执行回零，仅设当前为原点 |
+| `Marlin/src/module/motion.cpp` | 修改：MECANUM 下 apply_motion_limits 直接 return |
+| `Marlin/src/MarlinCore.cpp` | 修改：MECANUM 下 setup() 中标记各轴已回零 |
 | `CHANGELOG_MECANUM.md` | 新增（本文件） |

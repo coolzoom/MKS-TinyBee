@@ -872,7 +872,9 @@
 //#define Z2_DRIVER_TYPE A4988
 //#define Z3_DRIVER_TYPE A4988
 //#define Z4_DRIVER_TYPE A4988
-//#define I_DRIVER_TYPE  A4988
+#if LINEAR_AXES >= 4
+  #define I_DRIVER_TYPE  A4988   // 4th axis (A), Mecanum wheel
+#endif
 //#define J_DRIVER_TYPE  A4988
 //#define K_DRIVER_TYPE  A4988
 #define E0_DRIVER_TYPE A4988
