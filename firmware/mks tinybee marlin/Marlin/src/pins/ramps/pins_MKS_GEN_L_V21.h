@@ -82,4 +82,10 @@
   #define E1_SERIAL_RX_PIN                    12
 #endif
 
+// Mecanum robot base: 4th axis (I/A) uses E1 driver, no physical endstops
+#if ENABLED(MECANUM_ROBOTBASE) && LINEAR_AXES >= 4
+  #define I_MIN_PIN                           -1
+  #define I_MAX_PIN                           -1
+#endif
+
 #include "pins_RAMPS.h"

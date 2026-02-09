@@ -102,6 +102,12 @@
 - 停止用 `S`，可随时中断运动。
 - 距离/角度命令在执行完成后回 `ok`。
 
+### 速度与最大速度
+- **默认速度**：不带速度参数时（如 `F`、`FD100`）使用 **200 mm/s**（可在 `mecanum_robotbase.cpp` 中改 `MECANUM_DEFAULT_SPEED_MM_S`）。
+- **指定速度**：如 `B300`、`L200`、`FD50:250`，速度范围 **0–300 mm/s**（上限见 `ROBOTBASE_SPEED_MAX`）。
+- **如何用最大速度**：发 `F`、`B`、`L`、`R` 等不跟数字即 200 mm/s；发 `B300`、`L300` 等即 300 mm/s（需机械允许）。
+- **加速度**：Configuration.h 中 `DEFAULT_MAX_ACCELERATION`、`DEFAULT_ACCELERATION`、`DEFAULT_TRAVEL_ACCELERATION` 已提高（如 800），以便尽快达到设定速度。
+
 ---
 
 ## 7. PlatformIO 编译修复（2026-02-08）
@@ -143,7 +149,8 @@
 |------|----------|
 | `Marlin/Configuration.h` | 修改：LINEAR_AXES=4、行程、I 轴、steps/feedrate/accel/homing、USE_IMIN_PLUG、BAUDRATE 250000、**X/Y/Z/I_DRIVER_TYPE A4988**（ESP32 不支持 TMC220x 软件串口） |
 | `Marlin/Configuration_adv.h` | 修改：HOMING_BUMP_MM、HOMING_BUMP_DIVISOR、AXIS_RELATIVE_MODES |
-| `Marlin/src/pins/esp32/pins_MKS_TINYBEE.h` | 修改：I 轴引脚及 I_MIN_PIN/I_MAX_PIN=-1 |
+| `Marlin/src/pins/esp32/pins_MKS_TINYBEE.h` | 修改：I 轴引脚及 I_MIN_PIN/I_MAX_PIN=-1（仅 ESP32 TinyBee） |
+| `Marlin/src/pins/ramps/pins_MKS_GEN_L_V21.h` | 修改：MECANUM 时 I_MIN_PIN/I_MAX_PIN=-1（Mega2560） |
 | `Marlin/src/feature/mecanum_robotbase.h` | 新增 |
 | `Marlin/src/feature/mecanum_robotbase.cpp` | 新增 |
 | `Marlin/src/gcode/queue.cpp` | 修改：包含头文件并调用 process_robotbase_command |
@@ -151,3 +158,15 @@
 | `Marlin/src/module/motion.cpp` | 修改：MECANUM 下 apply_motion_limits 直接 return |
 | `Marlin/src/MarlinCore.cpp` | 修改：MECANUM 下 setup() 中标记各轴已回零 |
 | `CHANGELOG_MECANUM.md` | 新增（本文件） |
+
+---
+
+## 9. Mega2560（MKS GEN L V2.1）支持
+
+板子改为 **Arduino Mega2560**（如 RAMPS 1.4 / MKS GEN L V2.1）时：
+
+- **platformio.ini**：`default_envs = mega2560`（或 `pio run -e mega2560`）。
+- **Configuration.h**：`MOTHERBOARD` 设为 **BOARD_MKS_GEN_L_V21**（Mega2560 + RAMPS）；若用其他 Mega2560 板型，选对应 boards.h 中的名称（如 BOARD_RAMPS_14_EFB）。
+- **I 轴引脚**：在 **pins_MKS_GEN_L_V21.h** 中，当 `MECANUM_ROBOTBASE` 且 `LINEAR_AXES >= 4` 时定义 **I_MIN_PIN / I_MAX_PIN = -1**（无物理限位）；I 轴步进由 pins_postprocess 自动映射到 E1（E1_STEP_PIN/DIR/ENABLE）。
+- **mks_esp_test.cpp**：该文件为 ESP32 测试用，原直接 `#include` 了 `pins_MKS_TINYBEE.h`，在 mega2560 下会触发 `env_validate.h` 的 `#error "Oops! Select an ESP32 board"`。已改为 `#if defined(ESP32)` 后再包含 TinyBee 引脚，非 ESP32 构建时不再包含，mega2560 可正常编译。
+- 若仍出现编译错误，请把完整报错贴出以便继续排查。

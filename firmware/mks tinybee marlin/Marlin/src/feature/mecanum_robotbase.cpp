@@ -14,7 +14,7 @@
 #include "../MarlinCore.h"
 
 #ifndef MECANUM_DEFAULT_SPEED_MM_S
-  #define MECANUM_DEFAULT_SPEED_MM_S 50.0f
+  #define MECANUM_DEFAULT_SPEED_MM_S 200.0f  // default speed (mm/s) when command has no speed; use max by default
 #endif
 #ifndef MECANUM_ROTATION_RADIUS_MM
   #define MECANUM_ROTATION_RADIUS_MM 150.0f
@@ -25,7 +25,7 @@
 #define MECANUM_TRANSFORM_FACTOR 0.7071f  // √2/2 for lateral
 #define MECANUM_CONTINUOUS_MM   10000.0f // long move until S
 #define ROBOTBASE_SPEED_MIN     0.0f
-#define ROBOTBASE_SPEED_MAX     200.0f
+#define ROBOTBASE_SPEED_MAX     300.0f   // max speed (mm/s) for commands like B300, L300
 #define ROBOTBASE_DISTANCE_MAX  10000.0f
 #define ROBOTBASE_ANGLE_MAX     360.0f
 
