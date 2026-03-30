@@ -99,6 +99,7 @@ static uint8_t robotbase_raytracing_enabled = 1;
 static uint8_t robotbase_centered = 0;
 static bool    robotbase_profile_applied = false;
 static uint8_t robotbase_remote_mode = 0;
+static bool    rb_remote_apply_busy = false;
 static uint8_t rb_pwm_stream_enabled = 0;
 enum : uint8_t { RB_CH_FB = 0, RB_CH_LR, RB_CH_ROT, RB_CH_RAY };
 static volatile uint32_t rb_pwm_rise_us[4] = { 0, 0, 0, 0 };
@@ -332,7 +333,12 @@ static void robotbase_remote_stop() {
 }
 
 static void robotbase_remote_apply(const uint8_t mode, const float speed_mm_s) {
+  if (rb_remote_apply_busy) return; // Prevent re-entry via quickstop->idle()->task()
   if (mode == robotbase_remote_mode && robotbase_stepflage && speed_mm_s == robotbase_current_speed) return;
+
+  rb_remote_apply_busy = true;
+  // Set target mode first so nested task() calls (during quickstop) won't retrigger mode switch.
+  robotbase_remote_mode = mode;
 
   switch (mode) {
     case RB_REMOTE_FB_FWD:
@@ -357,9 +363,10 @@ static void robotbase_remote_apply(const uint8_t mode, const float speed_mm_s) {
       break;
     default:
       robotbase_remote_stop();
+      rb_remote_apply_busy = false;
       return;
   }
-  robotbase_remote_mode = mode;
+  rb_remote_apply_busy = false;
 }
 
 void mecanum_robotbase_init() {
