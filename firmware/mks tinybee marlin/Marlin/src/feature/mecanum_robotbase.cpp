@@ -69,6 +69,9 @@
 #ifndef RB_ANALOG_POLL_MS
   #define RB_ANALOG_POLL_MS           20
 #endif
+#ifndef RB_PWM_STREAM_INTERVAL_MS
+  #define RB_PWM_STREAM_INTERVAL_MS   1000
+#endif
 #ifndef RB_REMOTE_SPEED_MM_S
   #define RB_REMOTE_SPEED_MM_S        60.0f
 #endif
@@ -84,7 +87,10 @@ static uint8_t robotbase_raytracing_enabled = 1;
 static uint8_t robotbase_centered = 0;
 static bool    robotbase_profile_applied = false;
 static uint8_t robotbase_remote_mode = 0;
+static uint8_t rb_pwm_stream_enabled = 0;
+enum : uint8_t { RB_CH_FB = 0, RB_CH_LR, RB_CH_ROT, RB_CH_RAY };
 static volatile uint32_t rb_pwm_rise_us[4] = { 0, 0, 0, 0 };
+static volatile uint32_t rb_pwm_updates[4] = { 0, 0, 0, 0 };
 static volatile int      rb_pwm_us[4] = {
   RB_PWM_CENTER_FB_US, RB_PWM_CENTER_LR_US, RB_PWM_CENTER_ROT_US, RB_PWM_CENTER_RAY_US
 };
@@ -95,6 +101,82 @@ static int rb_pwm_ray = RB_PWM_CENTER_RAY_US;
 
 static void reply_ack() { SERIAL_ECHOLNPGM("ACK"); }
 static void reply_ok()  { SERIAL_ECHOLNPGM("ok"); }
+
+static void report_pwm_snapshot(const bool include_thresholds) {
+  const int pwm_low_fb = RB_PWM_CENTER_FB_US - RB_PWM_DEADBAND_FB_US;
+  const int pwm_high_fb = RB_PWM_CENTER_FB_US + RB_PWM_DEADBAND_FB_US;
+  const int pwm_low_lr = RB_PWM_CENTER_LR_US - RB_PWM_DEADBAND_LR_US;
+  const int pwm_high_lr = RB_PWM_CENTER_LR_US + RB_PWM_DEADBAND_LR_US;
+  const int pwm_low_rot = RB_PWM_CENTER_ROT_US - RB_PWM_DEADBAND_ROT_US;
+  const int pwm_high_rot = RB_PWM_CENTER_ROT_US + RB_PWM_DEADBAND_ROT_US;
+  const int pwm_low_ray = RB_PWM_CENTER_RAY_US - RB_PWM_DEADBAND_RAY_US;
+  const int pwm_high_ray = RB_PWM_CENTER_RAY_US + RB_PWM_DEADBAND_RAY_US;
+
+  SERIAL_ECHOPGM("PWM:FB=");
+  SERIAL_ECHO(rb_pwm_fb);
+  SERIAL_ECHOPGM(",LR=");
+  SERIAL_ECHO(rb_pwm_lr);
+  SERIAL_ECHOPGM(",ROT=");
+  SERIAL_ECHO(rb_pwm_rot);
+  SERIAL_ECHOPGM(",RAY=");
+  SERIAL_ECHO(rb_pwm_ray);
+  SERIAL_ECHOPGM(",enFB=");
+  SERIAL_ECHO(int(RB_REMOTE_ENABLE_FB));
+  SERIAL_ECHOPGM(",enLR=");
+  SERIAL_ECHO(int(RB_REMOTE_ENABLE_LR));
+  SERIAL_ECHOPGM(",enROT=");
+  SERIAL_ECHO(int(RB_REMOTE_ENABLE_ROT));
+  SERIAL_ECHOPGM(",enRAY=");
+  SERIAL_ECHO(int(RB_REMOTE_ENABLE_RAY));
+  SERIAL_ECHOPGM(",stream=");
+  SERIAL_ECHO(int(rb_pwm_stream_enabled));
+  SERIAL_ECHOPGM(",updFB=");
+  SERIAL_ECHO(rb_pwm_updates[RB_CH_FB]);
+  SERIAL_ECHOPGM(",updLR=");
+  SERIAL_ECHO(rb_pwm_updates[RB_CH_LR]);
+  SERIAL_ECHOPGM(",updROT=");
+  SERIAL_ECHO(rb_pwm_updates[RB_CH_ROT]);
+  SERIAL_ECHOPGM(",updRAY=");
+  SERIAL_ECHO(rb_pwm_updates[RB_CH_RAY]);
+  if (!include_thresholds) { SERIAL_EOL(); return; }
+
+  // Thresholds / calibration details
+  if (include_thresholds) {
+    SERIAL_ECHOPGM(",cFB=");
+    SERIAL_ECHO(RB_PWM_CENTER_FB_US);
+    SERIAL_ECHOPGM(",dFB=");
+    SERIAL_ECHO(RB_PWM_DEADBAND_FB_US);
+    SERIAL_ECHOPGM(",lowFB=");
+    SERIAL_ECHO(pwm_low_fb);
+    SERIAL_ECHOPGM(",highFB=");
+    SERIAL_ECHO(pwm_high_fb);
+    SERIAL_ECHOPGM(",cLR=");
+    SERIAL_ECHO(RB_PWM_CENTER_LR_US);
+    SERIAL_ECHOPGM(",dLR=");
+    SERIAL_ECHO(RB_PWM_DEADBAND_LR_US);
+    SERIAL_ECHOPGM(",lowLR=");
+    SERIAL_ECHO(pwm_low_lr);
+    SERIAL_ECHOPGM(",highLR=");
+    SERIAL_ECHO(pwm_high_lr);
+    SERIAL_ECHOPGM(",cROT=");
+    SERIAL_ECHO(RB_PWM_CENTER_ROT_US);
+    SERIAL_ECHOPGM(",dROT=");
+    SERIAL_ECHO(RB_PWM_DEADBAND_ROT_US);
+    SERIAL_ECHOPGM(",lowROT=");
+    SERIAL_ECHO(pwm_low_rot);
+    SERIAL_ECHOPGM(",highROT=");
+    SERIAL_ECHO(pwm_high_rot);
+    SERIAL_ECHOPGM(",cRAY=");
+    SERIAL_ECHO(RB_PWM_CENTER_RAY_US);
+    SERIAL_ECHOPGM(",dRAY=");
+    SERIAL_ECHO(RB_PWM_DEADBAND_RAY_US);
+    SERIAL_ECHOPGM(",lowRAY=");
+    SERIAL_ECHO(pwm_low_ray);
+    SERIAL_ECHOPGM(",highRAY=");
+    SERIAL_ECHO(pwm_high_ray);
+  }
+  SERIAL_EOL();
+}
 
 enum : uint8_t {
   RB_REMOTE_STOP = 0,
@@ -108,8 +190,6 @@ enum : uint8_t {
   RB_REMOTE_RAY_R
 };
 
-enum : uint8_t { RB_CH_FB = 0, RB_CH_LR, RB_CH_ROT, RB_CH_RAY };
-
 static inline void rb_pwm_edge(const uint8_t ch, const int pin) {
   const uint32_t now = micros();
   if (digitalRead(pin)) rb_pwm_rise_us[ch] = now;
@@ -117,7 +197,10 @@ static inline void rb_pwm_edge(const uint8_t ch, const int pin) {
     const uint32_t rise = rb_pwm_rise_us[ch];
     if (rise) {
       const uint32_t w = now - rise;
-      if (w >= 700 && w <= 2500) rb_pwm_us[ch] = int(w);
+      if (w >= 700 && w <= 2500) {
+        rb_pwm_us[ch] = int(w);
+        rb_pwm_updates[ch]++;
+      }
     }
   }
 }
@@ -287,11 +370,6 @@ void mecanum_robotbase_task() {
   if (!ELAPSED(millis(), next_poll_ms)) return;
   next_poll_ms = millis() + RB_ANALOG_POLL_MS;
 
-  // Serial command has priority over analog remote control.
-  if (robotbase_serial_controlled) return;
-
-  apply_robotbase_motion_profile();
-
   constexpr int pwm_low_fb = RB_PWM_CENTER_FB_US - RB_PWM_DEADBAND_FB_US;
   constexpr int pwm_high_fb = RB_PWM_CENTER_FB_US + RB_PWM_DEADBAND_FB_US;
   constexpr int pwm_low_lr = RB_PWM_CENTER_LR_US - RB_PWM_DEADBAND_LR_US;
@@ -307,6 +385,20 @@ void mecanum_robotbase_task() {
   rb_pwm_lr = rb_pwm_us[RB_CH_LR];
   rb_pwm_rot = rb_pwm_us[RB_CH_ROT];
   rb_pwm_ray = rb_pwm_us[RB_CH_RAY];
+
+  if (rb_pwm_stream_enabled) {
+    static millis_t next_stream_ms = 0;
+    if (ELAPSED(millis(), next_stream_ms)) {
+      report_pwm_snapshot(false);
+      next_stream_ms = millis() + RB_PWM_STREAM_INTERVAL_MS;
+    }
+  }
+
+  // Serial command has priority over analog remote control.
+  // Keep PWM debug output running even when serial motion is active.
+  if (robotbase_serial_controlled) return;
+
+  apply_robotbase_motion_profile();
 
   // Inputs not yet captured / invalid: avoid accidental movement.
   if (rb_pwm_fb == 0 && rb_pwm_lr == 0 && rb_pwm_rot == 0 && rb_pwm_ray == 0) {
@@ -344,6 +436,7 @@ static bool is_robotbase_command(const char *cmd) {
   if (!cmd || !*cmd) return false;
   char c = cmd[0];
   if ((c == 'A' && strncmp(cmd, "ADC", 3) == 0) || (c == 'P' && strncmp(cmd, "PWM", 3) == 0)) return true;
+  if (strcmp(cmd, "PWMON") == 0 || strcmp(cmd, "PWMOFF") == 0) return true;
   if (c == 'S') {
     if (cmd[1] == '\0') return true; // S
     if (cmd[1] == 'T' && strncmp(cmd, "STATUS", 6) == 0) return true;
@@ -426,68 +519,28 @@ bool process_robotbase_command(char *command) {
     SERIAL_ECHOPGM(",pwmRAYLow=");
     SERIAL_ECHO(pwm_low_ray);
     SERIAL_ECHOPGM(",pwmRAYHigh=");
-    SERIAL_ECHOLN(pwm_high_ray);
+    SERIAL_ECHO(pwm_high_ray);
+    SERIAL_ECHOPGM(",pwmStream=");
+    SERIAL_ECHOLN(int(rb_pwm_stream_enabled));
+    return true;
+  }
+
+  // PWM stream control
+  if (strcmp(command, "PWMON") == 0) {
+    rb_pwm_stream_enabled = 1;
+    rb_pwm_updates[RB_CH_FB] = rb_pwm_updates[RB_CH_LR] = rb_pwm_updates[RB_CH_ROT] = rb_pwm_updates[RB_CH_RAY] = 0;
+    SERIAL_ECHOLNPGM("pwm stream on");
+    return true;
+  }
+  if (strcmp(command, "PWMOFF") == 0) {
+    rb_pwm_stream_enabled = 0;
+    SERIAL_ECHOLNPGM("pwm stream off");
     return true;
   }
 
   // PWM / ADC(legacy) - print raw pulse widths and thresholds
   if (strncmp(command, "PWM", 3) == 0 || strncmp(command, "ADC", 3) == 0) {
-    const int pwm_low_fb = RB_PWM_CENTER_FB_US - RB_PWM_DEADBAND_FB_US;
-    const int pwm_high_fb = RB_PWM_CENTER_FB_US + RB_PWM_DEADBAND_FB_US;
-    const int pwm_low_lr = RB_PWM_CENTER_LR_US - RB_PWM_DEADBAND_LR_US;
-    const int pwm_high_lr = RB_PWM_CENTER_LR_US + RB_PWM_DEADBAND_LR_US;
-    const int pwm_low_rot = RB_PWM_CENTER_ROT_US - RB_PWM_DEADBAND_ROT_US;
-    const int pwm_high_rot = RB_PWM_CENTER_ROT_US + RB_PWM_DEADBAND_ROT_US;
-    const int pwm_low_ray = RB_PWM_CENTER_RAY_US - RB_PWM_DEADBAND_RAY_US;
-    const int pwm_high_ray = RB_PWM_CENTER_RAY_US + RB_PWM_DEADBAND_RAY_US;
-    SERIAL_ECHOPGM("PWM:FB=");
-    SERIAL_ECHO(rb_pwm_fb);
-    SERIAL_ECHOPGM(",LR=");
-    SERIAL_ECHO(rb_pwm_lr);
-    SERIAL_ECHOPGM(",ROT=");
-    SERIAL_ECHO(rb_pwm_rot);
-    SERIAL_ECHOPGM(",RAY=");
-    SERIAL_ECHO(rb_pwm_ray);
-    SERIAL_ECHOPGM(",enFB=");
-    SERIAL_ECHO(int(RB_REMOTE_ENABLE_FB));
-    SERIAL_ECHOPGM(",enLR=");
-    SERIAL_ECHO(int(RB_REMOTE_ENABLE_LR));
-    SERIAL_ECHOPGM(",enROT=");
-    SERIAL_ECHO(int(RB_REMOTE_ENABLE_ROT));
-    SERIAL_ECHOPGM(",enRAY=");
-    SERIAL_ECHO(int(RB_REMOTE_ENABLE_RAY));
-    SERIAL_ECHOPGM(",cFB=");
-    SERIAL_ECHO(RB_PWM_CENTER_FB_US);
-    SERIAL_ECHOPGM(",dFB=");
-    SERIAL_ECHO(RB_PWM_DEADBAND_FB_US);
-    SERIAL_ECHOPGM(",lowFB=");
-    SERIAL_ECHO(pwm_low_fb);
-    SERIAL_ECHOPGM(",highFB=");
-    SERIAL_ECHO(pwm_high_fb);
-    SERIAL_ECHOPGM(",cLR=");
-    SERIAL_ECHO(RB_PWM_CENTER_LR_US);
-    SERIAL_ECHOPGM(",dLR=");
-    SERIAL_ECHO(RB_PWM_DEADBAND_LR_US);
-    SERIAL_ECHOPGM(",lowLR=");
-    SERIAL_ECHO(pwm_low_lr);
-    SERIAL_ECHOPGM(",highLR=");
-    SERIAL_ECHO(pwm_high_lr);
-    SERIAL_ECHOPGM(",cROT=");
-    SERIAL_ECHO(RB_PWM_CENTER_ROT_US);
-    SERIAL_ECHOPGM(",dROT=");
-    SERIAL_ECHO(RB_PWM_DEADBAND_ROT_US);
-    SERIAL_ECHOPGM(",lowROT=");
-    SERIAL_ECHO(pwm_low_rot);
-    SERIAL_ECHOPGM(",highROT=");
-    SERIAL_ECHO(pwm_high_rot);
-    SERIAL_ECHOPGM(",cRAY=");
-    SERIAL_ECHO(RB_PWM_CENTER_RAY_US);
-    SERIAL_ECHOPGM(",dRAY=");
-    SERIAL_ECHO(RB_PWM_DEADBAND_RAY_US);
-    SERIAL_ECHOPGM(",lowRAY=");
-    SERIAL_ECHO(pwm_low_ray);
-    SERIAL_ECHOPGM(",highRAY=");
-    SERIAL_ECHOLN(pwm_high_ray);
+    report_pwm_snapshot(true);
     return true;
   }
 

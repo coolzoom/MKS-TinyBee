@@ -76,6 +76,12 @@
   - 返回示例：`PWM:FB=1498,LR=1506,ROT=1492,RAY=1501,enFB=1,enLR=1,enROT=1,enRAY=1,cFB=1500,dFB=120,lowFB=1380,highFB=1620,...`
 - 命令 `STATUS`：也会附带 `pwmFB/pwmLR/pwmROT/pwmRAY` 和各通道 `Low/High` 字段。
 
+### 高频输出开关
+
+- `PWMON`：开启高频 PWM 连续输出（用于实时观察通道值）
+- `PWMOFF`：关闭高频 PWM 连续输出
+- 输出周期由 `RB_PWM_STREAM_INTERVAL_MS` 控制（默认 `50ms`，约 20Hz）
+
 ## 命令确认机制
 - 所有命令发送后，底盘控制板会立即回复"ACK"确认
 - 若未收到ACK，上位机应重新发送命令
