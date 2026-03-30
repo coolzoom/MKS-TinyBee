@@ -81,6 +81,7 @@
 - `PWMON`：开启高频 PWM 连续输出（用于实时观察通道值）
 - `PWMOFF`：关闭高频 PWM 连续输出
 - 输出周期由 `RB_PWM_STREAM_INTERVAL_MS` 控制（默认 `50ms`，约 20Hz）
+- 信号超时由 `RB_PWM_SIGNAL_TIMEOUT_MS` 控制（默认 `120ms`）；超过该时间未收到新脉宽将视为“松手/无信号”，自动停。
 
 ### 上电自动对中
 

@@ -81,6 +81,9 @@
 #ifndef RB_PWM_AUTO_CENTER_MIN_SAMPLES
   #define RB_PWM_AUTO_CENTER_MIN_SAMPLES 20
 #endif
+#ifndef RB_PWM_SIGNAL_TIMEOUT_MS
+  #define RB_PWM_SIGNAL_TIMEOUT_MS    120
+#endif
 #ifndef RB_REMOTE_SPEED_MM_S
   #define RB_REMOTE_SPEED_MM_S        60.0f
 #endif
@@ -100,6 +103,7 @@ static uint8_t rb_pwm_stream_enabled = 0;
 enum : uint8_t { RB_CH_FB = 0, RB_CH_LR, RB_CH_ROT, RB_CH_RAY };
 static volatile uint32_t rb_pwm_rise_us[4] = { 0, 0, 0, 0 };
 static volatile uint32_t rb_pwm_updates[4] = { 0, 0, 0, 0 };
+static volatile uint32_t rb_pwm_last_valid_us[4] = { 0, 0, 0, 0 };
 static volatile int      rb_pwm_us[4] = {
   RB_PWM_CENTER_FB_US, RB_PWM_CENTER_LR_US, RB_PWM_CENTER_ROT_US, RB_PWM_CENTER_RAY_US
 };
@@ -219,6 +223,7 @@ static inline void rb_pwm_edge(const uint8_t ch, const int pin) {
       if (w >= 700 && w <= 2500) {
         rb_pwm_us[ch] = int(w);
         rb_pwm_updates[ch]++;
+        rb_pwm_last_valid_us[ch] = now;
       }
     }
   }
@@ -295,7 +300,7 @@ static void mecanum_move_distance(float dx, float dy, float dz, float da, float 
 }
 
 // Continuous move: inject long move (no wait)
-static void mecanum_move_continuous(float dx, float dy, float dz, float da, float speed_mm_s) {
+static void mecanum_move_continuous(float dx, float dy, float dz, float da, float speed_mm_s, const bool serial_owner=true) {
   char buf[64], sx[10], sy[10], sz[10], sa[10];
   const float f = speed_mm_s * 60.0f;
   (void)sprintf(buf, "G91\nG1 X%s Y%s Z%s A%s F%ld\nG90",
@@ -307,15 +312,15 @@ static void mecanum_move_continuous(float dx, float dy, float dz, float da, floa
   );
   queue.inject(buf);
   robotbase_stepflage = 1;
-  robotbase_serial_controlled = 1;
+  robotbase_serial_controlled = serial_owner ? 1 : 0;
   robotbase_distance_controlled = 0;
   robotbase_current_speed = speed_mm_s;
 }
 
 // Restart continuous movement so updated speed takes effect immediately.
-static void mecanum_restart_continuous(float dx, float dy, float dz, float da, float speed_mm_s) {
+static void mecanum_restart_continuous(float dx, float dy, float dz, float da, float speed_mm_s, const bool serial_owner=true) {
   if (robotbase_stepflage) quickstop_stepper();
-  mecanum_move_continuous(dx, dy, dz, da, speed_mm_s);
+  mecanum_move_continuous(dx, dy, dz, da, speed_mm_s, serial_owner);
 }
 
 static void robotbase_remote_stop() {
@@ -331,24 +336,24 @@ static void robotbase_remote_apply(const uint8_t mode, const float speed_mm_s) {
 
   switch (mode) {
     case RB_REMOTE_FB_FWD:
-      mecanum_restart_continuous(-MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM, speed_mm_s);
+      mecanum_restart_continuous(-MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM, speed_mm_s, false);
       break;
     case RB_REMOTE_FB_BWD:
-      mecanum_restart_continuous( MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, speed_mm_s);
+      mecanum_restart_continuous( MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, speed_mm_s, false);
       break;
     case RB_REMOTE_SLIDE_L:
     case RB_REMOTE_RAY_L:
-      mecanum_restart_continuous(-MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM, speed_mm_s);
+      mecanum_restart_continuous(-MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM, speed_mm_s, false);
       break;
     case RB_REMOTE_SLIDE_R:
     case RB_REMOTE_RAY_R:
-      mecanum_restart_continuous( MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, speed_mm_s);
+      mecanum_restart_continuous( MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, speed_mm_s, false);
       break;
     case RB_REMOTE_ROT_L:
-      mecanum_restart_continuous( MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM, speed_mm_s);
+      mecanum_restart_continuous( MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM, speed_mm_s, false);
       break;
     case RB_REMOTE_ROT_R:
-      mecanum_restart_continuous(-MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, speed_mm_s);
+      mecanum_restart_continuous(-MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, speed_mm_s, false);
       break;
     default:
       robotbase_remote_stop();
@@ -413,6 +418,16 @@ void mecanum_robotbase_task() {
   rb_pwm_lr = rb_pwm_us[RB_CH_LR];
   rb_pwm_rot = rb_pwm_us[RB_CH_ROT];
   rb_pwm_ray = rb_pwm_us[RB_CH_RAY];
+  const uint32_t now_us = micros();
+  const uint32_t timeout_us = uint32_t(RB_PWM_SIGNAL_TIMEOUT_MS) * 1000UL;
+  const bool fb_fresh = (now_us - rb_pwm_last_valid_us[RB_CH_FB]) <= timeout_us;
+  const bool lr_fresh = (now_us - rb_pwm_last_valid_us[RB_CH_LR]) <= timeout_us;
+  const bool rot_fresh = (now_us - rb_pwm_last_valid_us[RB_CH_ROT]) <= timeout_us;
+  const bool ray_fresh = (now_us - rb_pwm_last_valid_us[RB_CH_RAY]) <= timeout_us;
+  if (!fb_fresh) rb_pwm_fb = rb_pwm_center_fb;
+  if (!lr_fresh) rb_pwm_lr = rb_pwm_center_lr;
+  if (!rot_fresh) rb_pwm_rot = rb_pwm_center_rot;
+  if (!ray_fresh) rb_pwm_ray = rb_pwm_center_ray;
 
   if (!rb_pwm_center_ready && RB_PWM_AUTO_CENTER) {
     const millis_t ms = millis();
@@ -456,12 +471,12 @@ void mecanum_robotbase_task() {
     return;
   }
 
-  const bool fb_fwd = RB_REMOTE_ENABLE_FB && rb_pwm_fb > pwm_high_fb, fb_bwd = RB_REMOTE_ENABLE_FB && rb_pwm_fb < pwm_low_fb;
-  const bool slide_r = RB_REMOTE_ENABLE_LR && rb_pwm_lr > pwm_high_lr, slide_l = RB_REMOTE_ENABLE_LR && rb_pwm_lr < pwm_low_lr;
-  const bool rot_r = RB_REMOTE_ENABLE_ROT && rb_pwm_rot > pwm_high_rot, rot_l = RB_REMOTE_ENABLE_ROT && rb_pwm_rot < pwm_low_rot;
+  const bool fb_fwd = RB_REMOTE_ENABLE_FB && fb_fresh && rb_pwm_fb > pwm_high_fb, fb_bwd = RB_REMOTE_ENABLE_FB && fb_fresh && rb_pwm_fb < pwm_low_fb;
+  const bool slide_r = RB_REMOTE_ENABLE_LR && lr_fresh && rb_pwm_lr > pwm_high_lr, slide_l = RB_REMOTE_ENABLE_LR && lr_fresh && rb_pwm_lr < pwm_low_lr;
+  const bool rot_r = RB_REMOTE_ENABLE_ROT && rot_fresh && rb_pwm_rot > pwm_high_rot, rot_l = RB_REMOTE_ENABLE_ROT && rot_fresh && rb_pwm_rot < pwm_low_rot;
 
   if (fb_fwd || fb_bwd) {
-    if (robotbase_raytracing_enabled && RB_REMOTE_ENABLE_RAY) {
+    if (robotbase_raytracing_enabled && RB_REMOTE_ENABLE_RAY && ray_fresh) {
       if (rb_pwm_ray > pwm_high_ray) { robotbase_remote_apply(RB_REMOTE_RAY_R, ray_speed_mm_s); return; }
       if (rb_pwm_ray < pwm_low_ray)  { robotbase_remote_apply(RB_REMOTE_RAY_L, ray_speed_mm_s); return; }
     }
