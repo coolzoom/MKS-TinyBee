@@ -91,6 +91,12 @@ static void mecanum_move_continuous(float dx, float dy, float dz, float da, floa
   robotbase_current_speed = speed_mm_s;
 }
 
+// Restart continuous movement so updated speed takes effect immediately.
+static void mecanum_restart_continuous(float dx, float dy, float dz, float da, float speed_mm_s) {
+  if (robotbase_stepflage) quickstop_stepper();
+  mecanum_move_continuous(dx, dy, dz, da, speed_mm_s);
+}
+
 static bool is_robotbase_command(const char *cmd) {
   if (!cmd || !*cmd) return false;
   char c = cmd[0];
@@ -222,7 +228,7 @@ bool process_robotbase_command(char *command) {
         robotbase_distance_controlled = 1;
         mecanum_move_distance(-d, d, -d, d, speed);
       } else {
-        mecanum_move_continuous(-MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, speed);
+        mecanum_restart_continuous(-MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, speed);
       }
       break;
     case 'B':
@@ -231,7 +237,7 @@ bool process_robotbase_command(char *command) {
         robotbase_distance_controlled = 1;
         mecanum_move_distance(d, -d, d, -d, speed);
       } else {
-        mecanum_move_continuous(MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, speed);
+        mecanum_restart_continuous(MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, speed);
       }
       break;
     case 'L':
@@ -245,7 +251,7 @@ bool process_robotbase_command(char *command) {
         robotbase_distance_controlled = 1;
         mecanum_move_distance(-lateral, -lateral, lateral, lateral, speed);
       } else {
-        mecanum_move_continuous(-MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, speed);
+        mecanum_restart_continuous(-MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, speed);
       }
       break;
     case 'R':
@@ -259,7 +265,7 @@ bool process_robotbase_command(char *command) {
         robotbase_distance_controlled = 1;
         mecanum_move_distance(lateral, lateral, -lateral, -lateral, speed);
       } else {
-        mecanum_move_continuous(MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, speed);
+        mecanum_restart_continuous(MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, speed);
       }
       break;
     case 'S':
@@ -274,9 +280,9 @@ bool process_robotbase_command(char *command) {
         robotbase_distance_controlled = 1;
         mecanum_move_distance(lateral, lateral, -lateral, -lateral, speed);
       } else if (command[1] == 'L') {
-        mecanum_move_continuous(-MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, speed);
+        mecanum_restart_continuous(-MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, speed);
       } else if (command[1] == 'R') {
-        mecanum_move_continuous(MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, speed);
+        mecanum_restart_continuous(MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, speed);
       }
       break;
     default:
