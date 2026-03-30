@@ -100,6 +100,7 @@ static uint8_t robotbase_centered = 0;
 static bool    robotbase_profile_applied = false;
 static uint8_t robotbase_remote_mode = 0;
 static bool    rb_remote_apply_busy = false;
+static bool    rb_remote_task_busy = false;
 static uint8_t rb_pwm_stream_enabled = 0;
 enum : uint8_t { RB_CH_FB = 0, RB_CH_LR, RB_CH_ROT, RB_CH_RAY };
 static volatile uint32_t rb_pwm_rise_us[4] = { 0, 0, 0, 0 };
@@ -406,6 +407,13 @@ void mecanum_robotbase_init() {
 }
 
 void mecanum_robotbase_task() {
+  if (rb_remote_task_busy) return; // Prevent recursive entry from idle()/quickstop paths.
+  rb_remote_task_busy = true;
+  struct RBTaskGuard {
+    bool &flag;
+    ~RBTaskGuard() { flag = false; }
+  } task_guard{ rb_remote_task_busy };
+
   static millis_t next_poll_ms = 0;
   if (!ELAPSED(millis(), next_poll_ms)) return;
   next_poll_ms = millis() + RB_ANALOG_POLL_MS;
