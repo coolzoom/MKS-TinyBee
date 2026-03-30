@@ -54,6 +54,10 @@ static uint8_t robotbase_raytracing_enabled = 1;
 static uint8_t robotbase_centered = 0;
 static bool    robotbase_profile_applied = false;
 static uint8_t robotbase_remote_mode = 0;
+static int     rb_adc_fb = RB_ADC_CENTER;
+static int     rb_adc_lr = RB_ADC_CENTER;
+static int     rb_adc_rot = RB_ADC_CENTER;
+static int     rb_adc_ray = RB_ADC_CENTER;
 
 static void reply_ack() { SERIAL_ECHOLNPGM("ACK"); }
 static void reply_ok()  { SERIAL_ECHOLNPGM("ok"); }
@@ -235,6 +239,16 @@ void mecanum_robotbase_task() {
   #ifdef RB_RAY_TRACK_PIN
     if (RB_RAY_TRACK_PIN >= 0) ray = analogRead(RB_RAY_TRACK_PIN);
   #endif
+  rb_adc_fb = fb;
+  rb_adc_lr = lr;
+  rb_adc_rot = rot;
+  rb_adc_ray = ray;
+
+  // Inputs disconnected / invalid: avoid accidental movement on floating channels.
+  if (fb == 0 && lr == 0 && rot == 0 && ray == 0) {
+    robotbase_remote_stop();
+    return;
+  }
 
   const bool fb_fwd = fb > adc_high, fb_bwd = fb < adc_low;
   const bool slide_r = lr > adc_high, slide_l = lr < adc_low;
@@ -265,6 +279,7 @@ void mecanum_robotbase_task() {
 static bool is_robotbase_command(const char *cmd) {
   if (!cmd || !*cmd) return false;
   char c = cmd[0];
+  if (c == 'A' && strncmp(cmd, "ADC", 3) == 0) return true;
   if (c == 'S') {
     if (cmd[1] == '\0') return true; // S
     if (cmd[1] == 'T' && strncmp(cmd, "STATUS", 6) == 0) return true;
@@ -304,6 +319,8 @@ bool process_robotbase_command(char *command) {
 
   // STATUS
   if (strncmp(command, "STATUS", 6) == 0) {
+    const int adc_low = RB_ADC_CENTER - RB_ADC_DEADBAND;
+    const int adc_high = RB_ADC_CENTER + RB_ADC_DEADBAND;
     SERIAL_ECHOPGM("STATUS:stepflage=");
     SERIAL_ECHO(robotbase_stepflage);
     SERIAL_ECHOPGM(",isSerialControlled=");
@@ -315,7 +332,42 @@ bool process_robotbase_command(char *command) {
     SERIAL_ECHOPGM(",isRaytracingEnabled=");
     SERIAL_ECHO(robotbase_raytracing_enabled);
     SERIAL_ECHOPGM(",isCentered=");
-    SERIAL_ECHOLN(robotbase_centered);
+    SERIAL_ECHO(robotbase_centered);
+    SERIAL_ECHOPGM(",adcFB=");
+    SERIAL_ECHO(rb_adc_fb);
+    SERIAL_ECHOPGM(",adcLR=");
+    SERIAL_ECHO(rb_adc_lr);
+    SERIAL_ECHOPGM(",adcROT=");
+    SERIAL_ECHO(rb_adc_rot);
+    SERIAL_ECHOPGM(",adcRAY=");
+    SERIAL_ECHO(rb_adc_ray);
+    SERIAL_ECHOPGM(",adcLow=");
+    SERIAL_ECHO(adc_low);
+    SERIAL_ECHOPGM(",adcHigh=");
+    SERIAL_ECHOLN(adc_high);
+    return true;
+  }
+
+  // ADC - print raw analog channels and current thresholds
+  if (strncmp(command, "ADC", 3) == 0) {
+    const int adc_low = RB_ADC_CENTER - RB_ADC_DEADBAND;
+    const int adc_high = RB_ADC_CENTER + RB_ADC_DEADBAND;
+    SERIAL_ECHOPGM("ADC:FB=");
+    SERIAL_ECHO(rb_adc_fb);
+    SERIAL_ECHOPGM(",LR=");
+    SERIAL_ECHO(rb_adc_lr);
+    SERIAL_ECHOPGM(",ROT=");
+    SERIAL_ECHO(rb_adc_rot);
+    SERIAL_ECHOPGM(",RAY=");
+    SERIAL_ECHO(rb_adc_ray);
+    SERIAL_ECHOPGM(",center=");
+    SERIAL_ECHO(RB_ADC_CENTER);
+    SERIAL_ECHOPGM(",deadband=");
+    SERIAL_ECHO(RB_ADC_DEADBAND);
+    SERIAL_ECHOPGM(",low=");
+    SERIAL_ECHO(adc_low);
+    SERIAL_ECHOPGM(",high=");
+    SERIAL_ECHOLN(adc_high);
     return true;
   }
 

@@ -64,6 +64,13 @@
 - 下阈值：`RB_ADC_CENTER - RB_ADC_DEADBAND`
 - 上阈值：`RB_ADC_CENTER + RB_ADC_DEADBAND`
 
+### 调试通道值（用于调阈值）
+
+- 命令 `ADC`：输出四路当前原始采样值与阈值
+  - 返回示例：`ADC:FB=2050,LR=1910,ROT=2120,RAY=2030,center=2048,deadband=220,low=1828,high=2268`
+- 命令 `STATUS`：也会附带 `adcFB/adcLR/adcROT/adcRAY/adcLow/adcHigh` 字段。
+- 若四路都读到 `0`（常见于未接输入），固件会忽略遥控并停止，避免上电误动作。
+
 ## 命令确认机制
 - 所有命令发送后，底盘控制板会立即回复"ACK"确认
 - 若未收到ACK，上位机应重新发送命令
