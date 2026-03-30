@@ -30,11 +30,41 @@
 #define ROBOTBASE_ANGLE_MAX     360.0f
 
 // Analog remote tuning (ESP32 ADC default 12-bit range: 0..4095)
-#ifndef RB_ADC_CENTER
-  #define RB_ADC_CENTER               2048
+#ifndef RB_REMOTE_ENABLE_FB
+  #define RB_REMOTE_ENABLE_FB         1
 #endif
-#ifndef RB_ADC_DEADBAND
-  #define RB_ADC_DEADBAND             220
+#ifndef RB_REMOTE_ENABLE_LR
+  #define RB_REMOTE_ENABLE_LR         1
+#endif
+#ifndef RB_REMOTE_ENABLE_ROT
+  #define RB_REMOTE_ENABLE_ROT        1
+#endif
+#ifndef RB_REMOTE_ENABLE_RAY
+  #define RB_REMOTE_ENABLE_RAY        1
+#endif
+#ifndef RB_ADC_CENTER_FB
+  #define RB_ADC_CENTER_FB            2048
+#endif
+#ifndef RB_ADC_CENTER_LR
+  #define RB_ADC_CENTER_LR            2048
+#endif
+#ifndef RB_ADC_CENTER_ROT
+  #define RB_ADC_CENTER_ROT           2048
+#endif
+#ifndef RB_ADC_CENTER_RAY
+  #define RB_ADC_CENTER_RAY           2048
+#endif
+#ifndef RB_ADC_DEADBAND_FB
+  #define RB_ADC_DEADBAND_FB          220
+#endif
+#ifndef RB_ADC_DEADBAND_LR
+  #define RB_ADC_DEADBAND_LR          220
+#endif
+#ifndef RB_ADC_DEADBAND_ROT
+  #define RB_ADC_DEADBAND_ROT         220
+#endif
+#ifndef RB_ADC_DEADBAND_RAY
+  #define RB_ADC_DEADBAND_RAY         220
 #endif
 #ifndef RB_ANALOG_POLL_MS
   #define RB_ANALOG_POLL_MS           20
@@ -54,10 +84,10 @@ static uint8_t robotbase_raytracing_enabled = 1;
 static uint8_t robotbase_centered = 0;
 static bool    robotbase_profile_applied = false;
 static uint8_t robotbase_remote_mode = 0;
-static int     rb_adc_fb = RB_ADC_CENTER;
-static int     rb_adc_lr = RB_ADC_CENTER;
-static int     rb_adc_rot = RB_ADC_CENTER;
-static int     rb_adc_ray = RB_ADC_CENTER;
+static int     rb_adc_fb = RB_ADC_CENTER_FB;
+static int     rb_adc_lr = RB_ADC_CENTER_LR;
+static int     rb_adc_rot = RB_ADC_CENTER_ROT;
+static int     rb_adc_ray = RB_ADC_CENTER_RAY;
 
 static void reply_ack() { SERIAL_ECHOLNPGM("ACK"); }
 static void reply_ok()  { SERIAL_ECHOLNPGM("ok"); }
@@ -219,14 +249,18 @@ void mecanum_robotbase_task() {
 
   apply_robotbase_motion_profile();
 
-  constexpr int adc_center = RB_ADC_CENTER;
-  constexpr int adc_deadband = RB_ADC_DEADBAND;
-  constexpr int adc_low = adc_center - adc_deadband;
-  constexpr int adc_high = adc_center + adc_deadband;
+  constexpr int adc_low_fb = RB_ADC_CENTER_FB - RB_ADC_DEADBAND_FB;
+  constexpr int adc_high_fb = RB_ADC_CENTER_FB + RB_ADC_DEADBAND_FB;
+  constexpr int adc_low_lr = RB_ADC_CENTER_LR - RB_ADC_DEADBAND_LR;
+  constexpr int adc_high_lr = RB_ADC_CENTER_LR + RB_ADC_DEADBAND_LR;
+  constexpr int adc_low_rot = RB_ADC_CENTER_ROT - RB_ADC_DEADBAND_ROT;
+  constexpr int adc_high_rot = RB_ADC_CENTER_ROT + RB_ADC_DEADBAND_ROT;
+  constexpr int adc_low_ray = RB_ADC_CENTER_RAY - RB_ADC_DEADBAND_RAY;
+  constexpr int adc_high_ray = RB_ADC_CENTER_RAY + RB_ADC_DEADBAND_RAY;
   constexpr float remote_speed_mm_s = RB_REMOTE_SPEED_MM_S;
   constexpr float ray_speed_mm_s = RB_RAY_CORRECT_SPEED_MM_S;
 
-  int fb = adc_center, lr = adc_center, rot = adc_center, ray = adc_center;
+  int fb = RB_ADC_CENTER_FB, lr = RB_ADC_CENTER_LR, rot = RB_ADC_CENTER_ROT, ray = RB_ADC_CENTER_RAY;
   #ifdef RB_REMOTE_FB_PIN
     if (RB_REMOTE_FB_PIN >= 0) fb = analogRead(RB_REMOTE_FB_PIN);
   #endif
@@ -250,14 +284,14 @@ void mecanum_robotbase_task() {
     return;
   }
 
-  const bool fb_fwd = fb > adc_high, fb_bwd = fb < adc_low;
-  const bool slide_r = lr > adc_high, slide_l = lr < adc_low;
-  const bool rot_r = rot > adc_high, rot_l = rot < adc_low;
+  const bool fb_fwd = RB_REMOTE_ENABLE_FB && fb > adc_high_fb, fb_bwd = RB_REMOTE_ENABLE_FB && fb < adc_low_fb;
+  const bool slide_r = RB_REMOTE_ENABLE_LR && lr > adc_high_lr, slide_l = RB_REMOTE_ENABLE_LR && lr < adc_low_lr;
+  const bool rot_r = RB_REMOTE_ENABLE_ROT && rot > adc_high_rot, rot_l = RB_REMOTE_ENABLE_ROT && rot < adc_low_rot;
 
   if (fb_fwd || fb_bwd) {
-    if (robotbase_raytracing_enabled) {
-      if (ray > adc_high) { robotbase_remote_apply(RB_REMOTE_RAY_R, ray_speed_mm_s); return; }
-      if (ray < adc_low)  { robotbase_remote_apply(RB_REMOTE_RAY_L, ray_speed_mm_s); return; }
+    if (robotbase_raytracing_enabled && RB_REMOTE_ENABLE_RAY) {
+      if (ray > adc_high_ray) { robotbase_remote_apply(RB_REMOTE_RAY_R, ray_speed_mm_s); return; }
+      if (ray < adc_low_ray)  { robotbase_remote_apply(RB_REMOTE_RAY_L, ray_speed_mm_s); return; }
     }
     robotbase_remote_apply(fb_fwd ? RB_REMOTE_FB_FWD : RB_REMOTE_FB_BWD, remote_speed_mm_s);
     return;
@@ -319,8 +353,14 @@ bool process_robotbase_command(char *command) {
 
   // STATUS
   if (strncmp(command, "STATUS", 6) == 0) {
-    const int adc_low = RB_ADC_CENTER - RB_ADC_DEADBAND;
-    const int adc_high = RB_ADC_CENTER + RB_ADC_DEADBAND;
+    const int adc_low_fb = RB_ADC_CENTER_FB - RB_ADC_DEADBAND_FB;
+    const int adc_high_fb = RB_ADC_CENTER_FB + RB_ADC_DEADBAND_FB;
+    const int adc_low_lr = RB_ADC_CENTER_LR - RB_ADC_DEADBAND_LR;
+    const int adc_high_lr = RB_ADC_CENTER_LR + RB_ADC_DEADBAND_LR;
+    const int adc_low_rot = RB_ADC_CENTER_ROT - RB_ADC_DEADBAND_ROT;
+    const int adc_high_rot = RB_ADC_CENTER_ROT + RB_ADC_DEADBAND_ROT;
+    const int adc_low_ray = RB_ADC_CENTER_RAY - RB_ADC_DEADBAND_RAY;
+    const int adc_high_ray = RB_ADC_CENTER_RAY + RB_ADC_DEADBAND_RAY;
     SERIAL_ECHOPGM("STATUS:stepflage=");
     SERIAL_ECHO(robotbase_stepflage);
     SERIAL_ECHOPGM(",isSerialControlled=");
@@ -341,17 +381,35 @@ bool process_robotbase_command(char *command) {
     SERIAL_ECHO(rb_adc_rot);
     SERIAL_ECHOPGM(",adcRAY=");
     SERIAL_ECHO(rb_adc_ray);
-    SERIAL_ECHOPGM(",adcLow=");
-    SERIAL_ECHO(adc_low);
-    SERIAL_ECHOPGM(",adcHigh=");
-    SERIAL_ECHOLN(adc_high);
+    SERIAL_ECHOPGM(",adcFBLow=");
+    SERIAL_ECHO(adc_low_fb);
+    SERIAL_ECHOPGM(",adcFBHigh=");
+    SERIAL_ECHO(adc_high_fb);
+    SERIAL_ECHOPGM(",adcLRLow=");
+    SERIAL_ECHO(adc_low_lr);
+    SERIAL_ECHOPGM(",adcLRHigh=");
+    SERIAL_ECHO(adc_high_lr);
+    SERIAL_ECHOPGM(",adcROTLow=");
+    SERIAL_ECHO(adc_low_rot);
+    SERIAL_ECHOPGM(",adcROTHigh=");
+    SERIAL_ECHO(adc_high_rot);
+    SERIAL_ECHOPGM(",adcRAYLow=");
+    SERIAL_ECHO(adc_low_ray);
+    SERIAL_ECHOPGM(",adcRAYHigh=");
+    SERIAL_ECHOLN(adc_high_ray);
     return true;
   }
 
   // ADC - print raw analog channels and current thresholds
   if (strncmp(command, "ADC", 3) == 0) {
-    const int adc_low = RB_ADC_CENTER - RB_ADC_DEADBAND;
-    const int adc_high = RB_ADC_CENTER + RB_ADC_DEADBAND;
+    const int adc_low_fb = RB_ADC_CENTER_FB - RB_ADC_DEADBAND_FB;
+    const int adc_high_fb = RB_ADC_CENTER_FB + RB_ADC_DEADBAND_FB;
+    const int adc_low_lr = RB_ADC_CENTER_LR - RB_ADC_DEADBAND_LR;
+    const int adc_high_lr = RB_ADC_CENTER_LR + RB_ADC_DEADBAND_LR;
+    const int adc_low_rot = RB_ADC_CENTER_ROT - RB_ADC_DEADBAND_ROT;
+    const int adc_high_rot = RB_ADC_CENTER_ROT + RB_ADC_DEADBAND_ROT;
+    const int adc_low_ray = RB_ADC_CENTER_RAY - RB_ADC_DEADBAND_RAY;
+    const int adc_high_ray = RB_ADC_CENTER_RAY + RB_ADC_DEADBAND_RAY;
     SERIAL_ECHOPGM("ADC:FB=");
     SERIAL_ECHO(rb_adc_fb);
     SERIAL_ECHOPGM(",LR=");
@@ -360,14 +418,46 @@ bool process_robotbase_command(char *command) {
     SERIAL_ECHO(rb_adc_rot);
     SERIAL_ECHOPGM(",RAY=");
     SERIAL_ECHO(rb_adc_ray);
-    SERIAL_ECHOPGM(",center=");
-    SERIAL_ECHO(RB_ADC_CENTER);
-    SERIAL_ECHOPGM(",deadband=");
-    SERIAL_ECHO(RB_ADC_DEADBAND);
-    SERIAL_ECHOPGM(",low=");
-    SERIAL_ECHO(adc_low);
-    SERIAL_ECHOPGM(",high=");
-    SERIAL_ECHOLN(adc_high);
+    SERIAL_ECHOPGM(",enFB=");
+    SERIAL_ECHO(int(RB_REMOTE_ENABLE_FB));
+    SERIAL_ECHOPGM(",enLR=");
+    SERIAL_ECHO(int(RB_REMOTE_ENABLE_LR));
+    SERIAL_ECHOPGM(",enROT=");
+    SERIAL_ECHO(int(RB_REMOTE_ENABLE_ROT));
+    SERIAL_ECHOPGM(",enRAY=");
+    SERIAL_ECHO(int(RB_REMOTE_ENABLE_RAY));
+    SERIAL_ECHOPGM(",cFB=");
+    SERIAL_ECHO(RB_ADC_CENTER_FB);
+    SERIAL_ECHOPGM(",dFB=");
+    SERIAL_ECHO(RB_ADC_DEADBAND_FB);
+    SERIAL_ECHOPGM(",lowFB=");
+    SERIAL_ECHO(adc_low_fb);
+    SERIAL_ECHOPGM(",highFB=");
+    SERIAL_ECHO(adc_high_fb);
+    SERIAL_ECHOPGM(",cLR=");
+    SERIAL_ECHO(RB_ADC_CENTER_LR);
+    SERIAL_ECHOPGM(",dLR=");
+    SERIAL_ECHO(RB_ADC_DEADBAND_LR);
+    SERIAL_ECHOPGM(",lowLR=");
+    SERIAL_ECHO(adc_low_lr);
+    SERIAL_ECHOPGM(",highLR=");
+    SERIAL_ECHO(adc_high_lr);
+    SERIAL_ECHOPGM(",cROT=");
+    SERIAL_ECHO(RB_ADC_CENTER_ROT);
+    SERIAL_ECHOPGM(",dROT=");
+    SERIAL_ECHO(RB_ADC_DEADBAND_ROT);
+    SERIAL_ECHOPGM(",lowROT=");
+    SERIAL_ECHO(adc_low_rot);
+    SERIAL_ECHOPGM(",highROT=");
+    SERIAL_ECHO(adc_high_rot);
+    SERIAL_ECHOPGM(",cRAY=");
+    SERIAL_ECHO(RB_ADC_CENTER_RAY);
+    SERIAL_ECHOPGM(",dRAY=");
+    SERIAL_ECHO(RB_ADC_DEADBAND_RAY);
+    SERIAL_ECHOPGM(",lowRAY=");
+    SERIAL_ECHO(adc_low_ray);
+    SERIAL_ECHOPGM(",highRAY=");
+    SERIAL_ECHOLN(adc_high_ray);
     return true;
   }
 

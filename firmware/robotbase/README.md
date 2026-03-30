@@ -53,22 +53,26 @@
 
 可按遥控器实际输出范围调整以下宏：
 
-- `RB_ADC_CENTER`：模拟量中心值（默认 `2048`）
-- `RB_ADC_DEADBAND`：中心死区（默认 `220`）
+- 通道使能：
+  - `RB_REMOTE_ENABLE_FB` / `RB_REMOTE_ENABLE_LR` / `RB_REMOTE_ENABLE_ROT` / `RB_REMOTE_ENABLE_RAY`（默认均为 `1`）
+- 各通道中心值：
+  - `RB_ADC_CENTER_FB` / `RB_ADC_CENTER_LR` / `RB_ADC_CENTER_ROT` / `RB_ADC_CENTER_RAY`（默认 `2048`）
+- 各通道死区：
+  - `RB_ADC_DEADBAND_FB` / `RB_ADC_DEADBAND_LR` / `RB_ADC_DEADBAND_ROT` / `RB_ADC_DEADBAND_RAY`（默认 `220`）
 - `RB_ANALOG_POLL_MS`：采样周期毫秒（默认 `20`）
 - `RB_REMOTE_SPEED_MM_S`：遥控动作基础速度（默认 `60.0` mm/s）
 - `RB_RAY_CORRECT_SPEED_MM_S`：光追纠偏速度（默认 `35.0` mm/s）
 
-方向判定阈值由中心值和死区自动计算：
+每个通道的方向判定阈值都由“本通道中心值+本通道死区”自动计算：
 
-- 下阈值：`RB_ADC_CENTER - RB_ADC_DEADBAND`
-- 上阈值：`RB_ADC_CENTER + RB_ADC_DEADBAND`
+- 下阈值：`center_xxx - deadband_xxx`
+- 上阈值：`center_xxx + deadband_xxx`
 
 ### 调试通道值（用于调阈值）
 
 - 命令 `ADC`：输出四路当前原始采样值与阈值
-  - 返回示例：`ADC:FB=2050,LR=1910,ROT=2120,RAY=2030,center=2048,deadband=220,low=1828,high=2268`
-- 命令 `STATUS`：也会附带 `adcFB/adcLR/adcROT/adcRAY/adcLow/adcHigh` 字段。
+  - 返回示例：`ADC:FB=2050,LR=1910,ROT=2120,RAY=2030,enFB=1,enLR=1,enROT=1,enRAY=1,cFB=2048,dFB=220,lowFB=1828,highFB=2268,...`
+- 命令 `STATUS`：也会附带 `adcFB/adcLR/adcROT/adcRAY` 和各通道 `Low/High` 字段。
 - 若四路都读到 `0`（常见于未接输入），固件会忽略遥控并停止，避免上电误动作。
 
 ## 命令确认机制
