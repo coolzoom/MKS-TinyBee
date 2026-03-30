@@ -2,9 +2,7 @@
 
 #include "../inc/MarlinConfigPre.h"
 #include "../gcode/queue.h"
-#if defined(ESP32)
-  #include "../pins/esp32/pins_MKS_TINYBEE.h"
-#endif
+#include "../pins/esp32/pins_MKS_TINYBEE.h"
 #include "../gcode/gcode.h"
 #include "../module/motion.h"
 #include "../module/planner.h"

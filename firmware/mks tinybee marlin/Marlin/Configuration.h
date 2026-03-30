@@ -138,9 +138,8 @@
 //#define BLUETOOTH
 
 // Choose the name from boards.h that matches your setup
-// Mega2560 + RAMPS: BOARD_MKS_GEN_L_V21  |  ESP32 TinyBee: BOARD_MKS_TINYBEE
 #ifndef MOTHERBOARD
-  #define MOTHERBOARD BOARD_MKS_GEN_L_V21
+  #define MOTHERBOARD BOARD_MKS_TINYBEE
 #endif
 
 // Name displayed in the LCD "Ready" message and Info menu
@@ -865,16 +864,16 @@
  *          TMC5130, TMC5130_STANDALONE, TMC5160, TMC5160_STANDALONE
  * :['A4988', 'A5984', 'DRV8825', 'LV8729', 'L6470', 'L6474', 'POWERSTEP01', 'TB6560', 'TB6600', 'TMC2100', 'TMC2130', 'TMC2130_STANDALONE', 'TMC2160', 'TMC2160_STANDALONE', 'TMC2208', 'TMC2208_STANDALONE', 'TMC2209', 'TMC2209_STANDALONE', 'TMC26X', 'TMC26X_STANDALONE', 'TMC2660', 'TMC2660_STANDALONE', 'TMC5130', 'TMC5130_STANDALONE', 'TMC5160', 'TMC5160_STANDALONE']
  */
-#define X_DRIVER_TYPE  TMC2209
-#define Y_DRIVER_TYPE  TMC2209
-#define Z_DRIVER_TYPE  TMC2209
+#define X_DRIVER_TYPE  A4988
+#define Y_DRIVER_TYPE  A4988
+#define Z_DRIVER_TYPE  A4988
 //#define X2_DRIVER_TYPE A4988
 //#define Y2_DRIVER_TYPE A4988
 //#define Z2_DRIVER_TYPE A4988
 //#define Z3_DRIVER_TYPE A4988
 //#define Z4_DRIVER_TYPE A4988
 #if LINEAR_AXES >= 4
-  #define I_DRIVER_TYPE  TMC2209   // 4th axis (A), Mecanum wheel. TMC220x SW Serial not supported on ESP32.
+  #define I_DRIVER_TYPE  A4988   // 4th axis (A), Mecanum wheel. TMC220x SW Serial not supported on ESP32.
 #endif
 //#define J_DRIVER_TYPE  A4988
 //#define K_DRIVER_TYPE  A4988
@@ -943,17 +942,16 @@
  //X  X轴是导程40mm的同步带滑轨道。每毫米脉冲数=（360/1.8） * TMC2209细分（X_MICROSTEPS=16） /40 = 80
  //Y  Y轴每毫米脉冲数=（360/1.8） * TMC2209细分（Y_MICROSTEPS=16） / 12丝杆导程 = 266.66666
  //Z dual motor Z使用时代驱动电机设置为每圈1600脉冲，丝杆导程5mm，每毫米脉冲数= 1600 / 5  = 320
- //麦克纳姆轮(360 / 1.8 * TMC2209细分 16 * 减速电机减速比 50) / (轮周长100mm) = 1600 
  */
  
-#define DEFAULT_AXIS_STEPS_PER_UNIT   { 1600, 1600, 1600, 1600, 1600 }
+#define DEFAULT_AXIS_STEPS_PER_UNIT   { 80, 80, 1600, 80, 400 }
 
 /**
  * Default Max Feed Rate (mm/s)
  * Override with M203
  *                                      X, Y, Z [, I [, J [, K]]], E0 [, E1[, E2...]]
  */
-#define DEFAULT_MAX_FEEDRATE          { 400, 400, 5, 400, 25 }  // X,Y,I 400 mm/s for mecanum max speed
+#define DEFAULT_MAX_FEEDRATE          { 300, 300, 5, 300, 25 }
 
 //#define LIMITED_MAX_FR_EDITING        // Limit edit via M203 or LCD to DEFAULT_MAX_FEEDRATE * 2
 #if ENABLED(LIMITED_MAX_FR_EDITING)
@@ -966,7 +964,7 @@
  * Override with M201
  *                                      X, Y, Z [, I [, J [, K]]], E0 [, E1[, E2...]]
  */
-#define DEFAULT_MAX_ACCELERATION      { 800, 800, 50, 800, 500 }  // X,Y,I high accel for mecanum (reach max speed quickly)
+#define DEFAULT_MAX_ACCELERATION      { 200, 200, 50, 200, 500 }
 
 //#define LIMITED_MAX_ACCEL_EDITING     // Limit edit via M201 or LCD to DEFAULT_MAX_ACCELERATION * 2
 #if ENABLED(LIMITED_MAX_ACCEL_EDITING)
@@ -981,9 +979,9 @@
  *   M204 R    Retract Acceleration
  *   M204 T    Travel Acceleration
  */
-#define DEFAULT_ACCELERATION          800    // X, Y, Z and E acceleration for printing moves (mecanum: reach speed fast)
+#define DEFAULT_ACCELERATION          200    // X, Y, Z and E acceleration for printing moves
 #define DEFAULT_RETRACT_ACCELERATION  500    // E acceleration for retracts
-#define DEFAULT_TRAVEL_ACCELERATION   800    // X, Y, Z acceleration for travel (mecanum: high for quick response)
+#define DEFAULT_TRAVEL_ACCELERATION   500    // X, Y, Z acceleration for travel (non printing) moves
 
 /**
  * Default Jerk limits (mm/s)
