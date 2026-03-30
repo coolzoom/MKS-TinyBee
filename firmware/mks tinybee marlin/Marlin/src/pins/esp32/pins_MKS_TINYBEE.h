@@ -55,6 +55,22 @@
 #define Z_STOP_PIN                            22
 //#define FIL_RUNOUT_PIN                        35
 
+#if ENABLED(MECANUM_ROBOTBASE)
+  // Robot base mode: no physical endstops, release stop pins for analog inputs.
+  #undef X_STOP_PIN
+  #undef Y_STOP_PIN
+  #undef Z_STOP_PIN
+  #define X_STOP_PIN                          -1
+  #define Y_STOP_PIN                          -1
+  #define Z_STOP_PIN                          -1
+
+  // Robot base mode uses EXP1/EXP2 analog-capable pins (ADC2, suitable when WiFi is disabled).
+  #define RB_REMOTE_FB_PIN                    14  // EXP2_08 / ADC2_CH6: forward / backward
+  #define RB_REMOTE_LR_PIN                    12  // EXP2_06 / ADC2_CH5: left / right move
+  #define RB_REMOTE_ROT_PIN                   13  // EXP1_09 / ADC2_CH4: left / right rotate
+  #define RB_RAY_TRACK_PIN                    15  // EXP1_04 / ADC2_CH3: ray-tracking analog
+#endif
+
 //
 // Enable I2S stepper stream
 //

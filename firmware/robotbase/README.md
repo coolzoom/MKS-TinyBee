@@ -18,6 +18,52 @@
 
 > 说明：上表与当前固件中的运动符号约定一致（例如前进为 `X- Y+ Z- A+`）。
 
+## 遥控与光线追踪模拟输入引脚（MKS TinyBee）
+
+在 `MECANUM_ROBOTBASE` 模式下，固件已预留以下模拟量输入引脚（使用 EXP1/EXP2 上的 ESP32 ADC2 引脚）：
+
+| 信号 | 引脚 | 说明 |
+|------|------|------|
+| 前进/后退遥控 | GPIO14（EXP2_08） | `RB_REMOTE_FB_PIN`（ADC2_CH6） |
+| 左右平移遥控 | GPIO12（EXP2_06） | `RB_REMOTE_LR_PIN`（ADC2_CH5） |
+| 左右旋转遥控 | GPIO13（EXP1_09） | `RB_REMOTE_ROT_PIN`（ADC2_CH4） |
+| 光线追踪模拟量 | GPIO15（EXP1_04） | `RB_RAY_TRACK_PIN`（ADC2_CH3） |
+
+注意事项：
+- 以上引脚基于 `firmware/mks tinybee marlin/Marlin/src/pins/esp32/pins_MKS_TINYBEE.h` 的 `MECANUM_ROBOTBASE` 配置。
+- 已在该模式下关闭 `X/Y/Z` 物理限位引脚（`X_STOP_PIN/Y_STOP_PIN/Z_STOP_PIN = -1`）。
+- 当前映射专门为了走 EXP1/EXP2 接口；请勿同时接入占用这些脚位的 LCD/按键扩展板。
+- ADC2 引脚在 ESP32 上与 WiFi 资源冲突，本方案适用于 **不使用 WiFi** 的场景。
+- 建议输入电压范围为 **0~3.3V**；请勿直接输入 5V 模拟信号。
+
+### 采样与执行逻辑（已在 Marlin 侧实现）
+
+- 采样周期：约 20ms（`idle()` 周期任务中轮询）。
+- 串口优先级：若串口命令在控制运动，则遥控模拟输入不接管。
+- 遥控映射：
+  - `RB_REMOTE_FB_PIN`：大于上阈值前进，小于下阈值后退
+  - `RB_REMOTE_LR_PIN`：大于上阈值右平移，小于下阈值左平移
+  - `RB_REMOTE_ROT_PIN`：大于上阈值右转，小于下阈值左转
+- 光线追踪：
+  - 仅在前进/后退状态下生效
+  - `RB_RAY_TRACK_PIN` 偏离中心时触发左右微调（左/右平移纠偏）
+- 无遥控输入时：自动停止运动。
+
+### 可调宏参数（`mecanum_robotbase.cpp`）
+
+可按遥控器实际输出范围调整以下宏：
+
+- `RB_ADC_CENTER`：模拟量中心值（默认 `2048`）
+- `RB_ADC_DEADBAND`：中心死区（默认 `220`）
+- `RB_ANALOG_POLL_MS`：采样周期毫秒（默认 `20`）
+- `RB_REMOTE_SPEED_MM_S`：遥控动作基础速度（默认 `60.0` mm/s）
+- `RB_RAY_CORRECT_SPEED_MM_S`：光追纠偏速度（默认 `35.0` mm/s）
+
+方向判定阈值由中心值和死区自动计算：
+
+- 下阈值：`RB_ADC_CENTER - RB_ADC_DEADBAND`
+- 上阈值：`RB_ADC_CENTER + RB_ADC_DEADBAND`
+
 ## 命令确认机制
 - 所有命令发送后，底盘控制板会立即回复"ACK"确认
 - 若未收到ACK，上位机应重新发送命令

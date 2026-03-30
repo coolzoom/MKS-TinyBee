@@ -100,6 +100,10 @@
   #include "feature/host_actions.h"
 #endif
 
+#if ENABLED(MECANUM_ROBOTBASE)
+  #include "feature/mecanum_robotbase.h"
+#endif
+
 #if USE_BEEPER
   #include "libs/buzzer.h"
 #endif
@@ -810,6 +814,9 @@ void idle(bool no_stepper_sleep/*=false*/) {
   // Handle UI input / draw events
   TERN(HAS_DWIN_E3V2_BASIC, DWIN_Update(), ui.update());
 
+  // Poll robotbase analog remote / ray-tracking inputs
+  TERN_(MECANUM_ROBOTBASE, mecanum_robotbase_task());
+
   // Run i2c Position Encoders
   #if ENABLED(I2C_POSITION_ENCODERS)
   {
@@ -1319,6 +1326,7 @@ void setup() {
 
   #if ENABLED(MECANUM_ROBOTBASE)
     LOOP_LINEAR_AXES(a) set_axis_is_at_home((AxisEnum)a);  // No homing: treat current position as origin
+    SETUP_RUN(mecanum_robotbase_init());
   #endif
 
   SETUP_RUN(thermalManager.init());   // Initialize temperature loop

@@ -29,6 +29,23 @@
 #define ROBOTBASE_DISTANCE_MAX  10000.0f
 #define ROBOTBASE_ANGLE_MAX     360.0f
 
+// Analog remote tuning (ESP32 ADC default 12-bit range: 0..4095)
+#ifndef RB_ADC_CENTER
+  #define RB_ADC_CENTER               2048
+#endif
+#ifndef RB_ADC_DEADBAND
+  #define RB_ADC_DEADBAND             220
+#endif
+#ifndef RB_ANALOG_POLL_MS
+  #define RB_ANALOG_POLL_MS           20
+#endif
+#ifndef RB_REMOTE_SPEED_MM_S
+  #define RB_REMOTE_SPEED_MM_S        60.0f
+#endif
+#ifndef RB_RAY_CORRECT_SPEED_MM_S
+  #define RB_RAY_CORRECT_SPEED_MM_S   35.0f
+#endif
+
 static uint8_t robotbase_stepflage = 0;   // 0=stopped, 1=moving
 static uint8_t robotbase_serial_controlled = 0;
 static uint8_t robotbase_distance_controlled = 0;
@@ -36,9 +53,22 @@ static float   robotbase_current_speed = 0.0f;
 static uint8_t robotbase_raytracing_enabled = 1;
 static uint8_t robotbase_centered = 0;
 static bool    robotbase_profile_applied = false;
+static uint8_t robotbase_remote_mode = 0;
 
 static void reply_ack() { SERIAL_ECHOLNPGM("ACK"); }
 static void reply_ok()  { SERIAL_ECHOLNPGM("ok"); }
+
+enum : uint8_t {
+  RB_REMOTE_STOP = 0,
+  RB_REMOTE_FB_FWD,
+  RB_REMOTE_FB_BWD,
+  RB_REMOTE_SLIDE_L,
+  RB_REMOTE_SLIDE_R,
+  RB_REMOTE_ROT_L,
+  RB_REMOTE_ROT_R,
+  RB_REMOTE_RAY_L,
+  RB_REMOTE_RAY_R
+};
 
 static void apply_robotbase_motion_profile() {
   if (robotbase_profile_applied) return;
@@ -119,6 +149,117 @@ static void mecanum_move_continuous(float dx, float dy, float dz, float da, floa
 static void mecanum_restart_continuous(float dx, float dy, float dz, float da, float speed_mm_s) {
   if (robotbase_stepflage) quickstop_stepper();
   mecanum_move_continuous(dx, dy, dz, da, speed_mm_s);
+}
+
+static void robotbase_remote_stop() {
+  if (robotbase_stepflage) quickstop_stepper();
+  robotbase_stepflage = 0;
+  robotbase_distance_controlled = 0;
+  robotbase_current_speed = 0;
+  robotbase_remote_mode = RB_REMOTE_STOP;
+}
+
+static void robotbase_remote_apply(const uint8_t mode, const float speed_mm_s) {
+  if (mode == robotbase_remote_mode && robotbase_stepflage && speed_mm_s == robotbase_current_speed) return;
+
+  switch (mode) {
+    case RB_REMOTE_FB_FWD:
+      mecanum_restart_continuous(-MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM, speed_mm_s);
+      break;
+    case RB_REMOTE_FB_BWD:
+      mecanum_restart_continuous( MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, speed_mm_s);
+      break;
+    case RB_REMOTE_SLIDE_L:
+    case RB_REMOTE_RAY_L:
+      mecanum_restart_continuous(-MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM, speed_mm_s);
+      break;
+    case RB_REMOTE_SLIDE_R:
+    case RB_REMOTE_RAY_R:
+      mecanum_restart_continuous( MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, speed_mm_s);
+      break;
+    case RB_REMOTE_ROT_L:
+      mecanum_restart_continuous( MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM,  MECANUM_CONTINUOUS_MM, speed_mm_s);
+      break;
+    case RB_REMOTE_ROT_R:
+      mecanum_restart_continuous(-MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, speed_mm_s);
+      break;
+    default:
+      robotbase_remote_stop();
+      return;
+  }
+  robotbase_remote_mode = mode;
+}
+
+void mecanum_robotbase_init() {
+  #ifdef RB_REMOTE_FB_PIN
+    if (RB_REMOTE_FB_PIN >= 0) SET_INPUT(RB_REMOTE_FB_PIN);
+  #endif
+  #ifdef RB_REMOTE_LR_PIN
+    if (RB_REMOTE_LR_PIN >= 0) SET_INPUT(RB_REMOTE_LR_PIN);
+  #endif
+  #ifdef RB_REMOTE_ROT_PIN
+    if (RB_REMOTE_ROT_PIN >= 0) SET_INPUT(RB_REMOTE_ROT_PIN);
+  #endif
+  #ifdef RB_RAY_TRACK_PIN
+    if (RB_RAY_TRACK_PIN >= 0) SET_INPUT(RB_RAY_TRACK_PIN);
+  #endif
+}
+
+void mecanum_robotbase_task() {
+  static millis_t next_poll_ms = 0;
+  if (!ELAPSED(millis(), next_poll_ms)) return;
+  next_poll_ms = millis() + RB_ANALOG_POLL_MS;
+
+  // Serial command has priority over analog remote control.
+  if (robotbase_serial_controlled) return;
+
+  apply_robotbase_motion_profile();
+
+  constexpr int adc_center = RB_ADC_CENTER;
+  constexpr int adc_deadband = RB_ADC_DEADBAND;
+  constexpr int adc_low = adc_center - adc_deadband;
+  constexpr int adc_high = adc_center + adc_deadband;
+  constexpr float remote_speed_mm_s = RB_REMOTE_SPEED_MM_S;
+  constexpr float ray_speed_mm_s = RB_RAY_CORRECT_SPEED_MM_S;
+
+  int fb = adc_center, lr = adc_center, rot = adc_center, ray = adc_center;
+  #ifdef RB_REMOTE_FB_PIN
+    if (RB_REMOTE_FB_PIN >= 0) fb = analogRead(RB_REMOTE_FB_PIN);
+  #endif
+  #ifdef RB_REMOTE_LR_PIN
+    if (RB_REMOTE_LR_PIN >= 0) lr = analogRead(RB_REMOTE_LR_PIN);
+  #endif
+  #ifdef RB_REMOTE_ROT_PIN
+    if (RB_REMOTE_ROT_PIN >= 0) rot = analogRead(RB_REMOTE_ROT_PIN);
+  #endif
+  #ifdef RB_RAY_TRACK_PIN
+    if (RB_RAY_TRACK_PIN >= 0) ray = analogRead(RB_RAY_TRACK_PIN);
+  #endif
+
+  const bool fb_fwd = fb > adc_high, fb_bwd = fb < adc_low;
+  const bool slide_r = lr > adc_high, slide_l = lr < adc_low;
+  const bool rot_r = rot > adc_high, rot_l = rot < adc_low;
+
+  if (fb_fwd || fb_bwd) {
+    if (robotbase_raytracing_enabled) {
+      if (ray > adc_high) { robotbase_remote_apply(RB_REMOTE_RAY_R, ray_speed_mm_s); return; }
+      if (ray < adc_low)  { robotbase_remote_apply(RB_REMOTE_RAY_L, ray_speed_mm_s); return; }
+    }
+    robotbase_remote_apply(fb_fwd ? RB_REMOTE_FB_FWD : RB_REMOTE_FB_BWD, remote_speed_mm_s);
+    return;
+  }
+
+  if (slide_l || slide_r) {
+    robotbase_remote_apply(slide_l ? RB_REMOTE_SLIDE_L : RB_REMOTE_SLIDE_R, remote_speed_mm_s);
+    return;
+  }
+
+  if (rot_l || rot_r) {
+    robotbase_remote_apply(rot_l ? RB_REMOTE_ROT_L : RB_REMOTE_ROT_R, remote_speed_mm_s);
+    return;
+  }
+
+  robotbase_remote_stop();
 }
 
 static bool is_robotbase_command(const char *cmd) {

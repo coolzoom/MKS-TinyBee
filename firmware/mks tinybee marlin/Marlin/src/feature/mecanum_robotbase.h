@@ -12,4 +12,14 @@
  */
 bool process_robotbase_command(char *command);
 
+/**
+ * Initialize optional robotbase peripherals (analog remote inputs).
+ */
+void mecanum_robotbase_init();
+
+/**
+ * Periodic robotbase task (remote sampling / motion arbitration).
+ */
+void mecanum_robotbase_task();
+
 #endif // MECANUM_ROBOTBASE
