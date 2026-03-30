@@ -20,25 +20,27 @@
 
 ## 遥控与光线追踪模拟输入引脚（MKS TinyBee）
 
-在 `MECANUM_ROBOTBASE` 模式下，固件已预留以下模拟量输入引脚（使用 EXP1/EXP2 上的 ESP32 ADC2 引脚）：
+在 `MECANUM_ROBOTBASE` 模式下，固件使用以下引脚接收遥控器 **PWM 脉宽信号**（使用 EXP1/EXP2 上的 ESP32 引脚）：
 
 | 信号 | 引脚 | 说明 |
 |------|------|------|
-| 前进/后退遥控 | GPIO14（EXP2_08） | `RB_REMOTE_FB_PIN`（ADC2_CH6） |
-| 左右平移遥控 | GPIO12（EXP2_06） | `RB_REMOTE_LR_PIN`（ADC2_CH5） |
-| 左右旋转遥控 | GPIO13（EXP1_09） | `RB_REMOTE_ROT_PIN`（ADC2_CH4） |
-| 光线追踪模拟量 | GPIO15（EXP1_04） | `RB_RAY_TRACK_PIN`（ADC2_CH3） |
+| 前进/后退遥控 | GPIO14（EXP2_08） | `RB_REMOTE_FB_PIN`（PWM输入） |
+| 左右平移遥控 | GPIO12（EXP2_06） | `RB_REMOTE_LR_PIN`（PWM输入） |
+| 左右旋转遥控 | GPIO13（EXP1_09） | `RB_REMOTE_ROT_PIN`（PWM输入） |
+| 光线追踪信号 | GPIO15（EXP1_04） | `RB_RAY_TRACK_PIN`（PWM输入） |
 
 注意事项：
 - 以上引脚基于 `firmware/mks tinybee marlin/Marlin/src/pins/esp32/pins_MKS_TINYBEE.h` 的 `MECANUM_ROBOTBASE` 配置。
 - 已在该模式下关闭 `X/Y/Z` 物理限位引脚（`X_STOP_PIN/Y_STOP_PIN/Z_STOP_PIN = -1`）。
 - 当前映射专门为了走 EXP1/EXP2 接口；请勿同时接入占用这些脚位的 LCD/按键扩展板。
-- ADC2 引脚在 ESP32 上与 WiFi 资源冲突，本方案适用于 **不使用 WiFi** 的场景。
+- 遥控器输出建议为标准 RC PWM（约 `1000~2000us`）。
+- 本方案适用于 **不使用 WiFi** 的场景。
 - 建议输入电压范围为 **0~3.3V**；请勿直接输入 5V 模拟信号。
 
 ### 采样与执行逻辑（已在 Marlin 侧实现）
 
-- 采样周期：约 20ms（`idle()` 周期任务中轮询）。
+- 采样方式：中断捕获 PWM 上升/下降沿，换算每通道脉宽（us）。
+- 控制刷新周期：约 20ms（`idle()` 周期任务中轮询最新脉宽）。
 - 串口优先级：若串口命令在控制运动，则遥控模拟输入不接管。
 - 遥控映射：
   - `RB_REMOTE_FB_PIN`：大于上阈值前进，小于下阈值后退
@@ -55,25 +57,24 @@
 
 - 通道使能：
   - `RB_REMOTE_ENABLE_FB` / `RB_REMOTE_ENABLE_LR` / `RB_REMOTE_ENABLE_ROT` / `RB_REMOTE_ENABLE_RAY`（默认均为 `1`）
-- 各通道中心值：
-  - `RB_ADC_CENTER_FB` / `RB_ADC_CENTER_LR` / `RB_ADC_CENTER_ROT` / `RB_ADC_CENTER_RAY`（默认 `2048`）
-- 各通道死区：
-  - `RB_ADC_DEADBAND_FB` / `RB_ADC_DEADBAND_LR` / `RB_ADC_DEADBAND_ROT` / `RB_ADC_DEADBAND_RAY`（默认 `220`）
+- 各通道中心脉宽（us）：
+  - `RB_PWM_CENTER_FB_US` / `RB_PWM_CENTER_LR_US` / `RB_PWM_CENTER_ROT_US` / `RB_PWM_CENTER_RAY_US`（默认 `1500`）
+- 各通道死区（us）：
+  - `RB_PWM_DEADBAND_FB_US` / `RB_PWM_DEADBAND_LR_US` / `RB_PWM_DEADBAND_ROT_US` / `RB_PWM_DEADBAND_RAY_US`（默认 `120`）
 - `RB_ANALOG_POLL_MS`：采样周期毫秒（默认 `20`）
 - `RB_REMOTE_SPEED_MM_S`：遥控动作基础速度（默认 `60.0` mm/s）
 - `RB_RAY_CORRECT_SPEED_MM_S`：光追纠偏速度（默认 `35.0` mm/s）
 
-每个通道的方向判定阈值都由“本通道中心值+本通道死区”自动计算：
+每个通道的方向判定阈值都由“本通道中心脉宽 + 本通道死区”自动计算：
 
 - 下阈值：`center_xxx - deadband_xxx`
 - 上阈值：`center_xxx + deadband_xxx`
 
 ### 调试通道值（用于调阈值）
 
-- 命令 `ADC`：输出四路当前原始采样值与阈值
-  - 返回示例：`ADC:FB=2050,LR=1910,ROT=2120,RAY=2030,enFB=1,enLR=1,enROT=1,enRAY=1,cFB=2048,dFB=220,lowFB=1828,highFB=2268,...`
-- 命令 `STATUS`：也会附带 `adcFB/adcLR/adcROT/adcRAY` 和各通道 `Low/High` 字段。
-- 若四路都读到 `0`（常见于未接输入），固件会忽略遥控并停止，避免上电误动作。
+- 命令 `PWM`：输出四路当前脉宽（us）与阈值（`ADC` 也兼容同样输出）。
+  - 返回示例：`PWM:FB=1498,LR=1506,ROT=1492,RAY=1501,enFB=1,enLR=1,enROT=1,enRAY=1,cFB=1500,dFB=120,lowFB=1380,highFB=1620,...`
+- 命令 `STATUS`：也会附带 `pwmFB/pwmLR/pwmROT/pwmRAY` 和各通道 `Low/High` 字段。
 
 ## 命令确认机制
 - 所有命令发送后，底盘控制板会立即回复"ACK"确认
