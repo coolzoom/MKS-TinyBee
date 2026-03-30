@@ -224,7 +224,7 @@ bool process_robotbase_command(char *command) {
     const char *colon = strchr(p, ':');
     if (distance_cmd && colon) {
       char *end;
-      distance = clamp_distance(strtof(p, &end));
+      distance = is_angle ? clamp_angle(strtof(p, &end)) : clamp_distance(strtof(p, &end));
       speed = clamp_speed(strtof(colon + 1, &end));
     } else if (distance_cmd) {
       char *end;
@@ -277,7 +277,8 @@ bool process_robotbase_command(char *command) {
         robotbase_distance_controlled = 1;
         mecanum_move_distance(-lateral, -lateral, lateral, lateral, speed);
       } else {
-        mecanum_restart_continuous(-MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, speed);
+        // L / R are turn commands (rotation in place), not slides.
+        mecanum_restart_continuous(MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, speed);
       }
       break;
     case 'R':
@@ -291,7 +292,8 @@ bool process_robotbase_command(char *command) {
         robotbase_distance_controlled = 1;
         mecanum_move_distance(lateral, lateral, -lateral, -lateral, speed);
       } else {
-        mecanum_restart_continuous(MECANUM_CONTINUOUS_MM, MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, speed);
+        // R is right turn (rotation in place).
+        mecanum_restart_continuous(-MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, -MECANUM_CONTINUOUS_MM, speed);
       }
       break;
     case 'S':
