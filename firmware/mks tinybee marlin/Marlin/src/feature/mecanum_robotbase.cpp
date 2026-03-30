@@ -35,9 +35,33 @@ static uint8_t robotbase_distance_controlled = 0;
 static float   robotbase_current_speed = 0.0f;
 static uint8_t robotbase_raytracing_enabled = 1;
 static uint8_t robotbase_centered = 0;
+static bool    robotbase_profile_applied = false;
 
 static void reply_ack() { SERIAL_ECHOLNPGM("ACK"); }
 static void reply_ok()  { SERIAL_ECHOLNPGM("ok"); }
+
+static void apply_robotbase_motion_profile() {
+  if (robotbase_profile_applied) return;
+
+  // Override possible EEPROM leftovers so speed commands behave predictably.
+  planner.settings.axis_steps_per_mm[X_AXIS] = 80.0f;
+  planner.settings.axis_steps_per_mm[Y_AXIS] = 80.0f;
+  planner.settings.axis_steps_per_mm[Z_AXIS] = 80.0f;
+  planner.settings.axis_steps_per_mm[I_AXIS] = 80.0f;
+  planner.refresh_positioning();
+
+  planner.set_max_feedrate(X_AXIS, 300.0f);
+  planner.set_max_feedrate(Y_AXIS, 300.0f);
+  planner.set_max_feedrate(Z_AXIS, 300.0f);
+  planner.set_max_feedrate(I_AXIS, 300.0f);
+
+  planner.set_max_acceleration(X_AXIS, 200.0f);
+  planner.set_max_acceleration(Y_AXIS, 200.0f);
+  planner.set_max_acceleration(Z_AXIS, 200.0f);
+  planner.set_max_acceleration(I_AXIS, 200.0f);
+
+  robotbase_profile_applied = true;
+}
 
 static float clamp_speed(float v) {
   if (v < ROBOTBASE_SPEED_MIN || v != v) return MECANUM_DEFAULT_SPEED_MM_S;
@@ -116,6 +140,7 @@ bool process_robotbase_command(char *command) {
   if (!command || !*command) return false;
   while (*command == ' ') command++;
   if (!is_robotbase_command(command)) return false;
+  apply_robotbase_motion_profile();
 
   // ID / ? : reply identity only (no ACK per README)
   if (strcmp(command, "ID") == 0 || strcmp(command, "?") == 0) {
@@ -214,6 +239,7 @@ bool process_robotbase_command(char *command) {
   if (distance_cmd && is_angle && distance <= 0) return true;
 
   robotbase_serial_controlled = 1;
+  robotbase_current_speed = speed;
 
   // Convert rotation angle to wheel travel (mm)
   float d = distance;
