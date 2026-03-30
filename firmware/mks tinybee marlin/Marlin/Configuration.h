@@ -944,14 +944,23 @@
  //Z dual motor Z使用时代驱动电机设置为每圈1600脉冲，丝杆导程5mm，每毫米脉冲数= 1600 / 5  = 320
  */
  
-#define DEFAULT_AXIS_STEPS_PER_UNIT   { 80, 80, 1600, 80, 400 }
+#if ENABLED(MECANUM_ROBOTBASE)
+  // XYZA are four wheel axes in mecanum mode. Keep wheel kinematics symmetric.
+  #define DEFAULT_AXIS_STEPS_PER_UNIT { 80, 80, 80, 80, 400 }
+#else
+  #define DEFAULT_AXIS_STEPS_PER_UNIT { 80, 80, 1600, 80, 400 }
+#endif
 
 /**
  * Default Max Feed Rate (mm/s)
  * Override with M203
  *                                      X, Y, Z [, I [, J [, K]]], E0 [, E1[, E2...]]
  */
-#define DEFAULT_MAX_FEEDRATE          { 300, 300, 5, 300, 25 }
+#if ENABLED(MECANUM_ROBOTBASE)
+  #define DEFAULT_MAX_FEEDRATE        { 300, 300, 300, 300, 25 }
+#else
+  #define DEFAULT_MAX_FEEDRATE        { 300, 300, 5, 300, 25 }
+#endif
 
 //#define LIMITED_MAX_FR_EDITING        // Limit edit via M203 or LCD to DEFAULT_MAX_FEEDRATE * 2
 #if ENABLED(LIMITED_MAX_FR_EDITING)
@@ -964,7 +973,11 @@
  * Override with M201
  *                                      X, Y, Z [, I [, J [, K]]], E0 [, E1[, E2...]]
  */
-#define DEFAULT_MAX_ACCELERATION      { 200, 200, 50, 200, 500 }
+#if ENABLED(MECANUM_ROBOTBASE)
+  #define DEFAULT_MAX_ACCELERATION    { 200, 200, 200, 200, 500 }
+#else
+  #define DEFAULT_MAX_ACCELERATION    { 200, 200, 50, 200, 500 }
+#endif
 
 //#define LIMITED_MAX_ACCEL_EDITING     // Limit edit via M201 or LCD to DEFAULT_MAX_ACCELERATION * 2
 #if ENABLED(LIMITED_MAX_ACCEL_EDITING)
@@ -1785,7 +1798,11 @@
 #endif
 
 // Homing speeds (mm/min) - 4 values for XYZA when LINEAR_AXES 4
-#define HOMING_FEEDRATE_MM_M { (50*60), (50*60), (4*60), (50*60) }
+#if ENABLED(MECANUM_ROBOTBASE)
+  #define HOMING_FEEDRATE_MM_M { (50*60), (50*60), (50*60), (50*60) }
+#else
+  #define HOMING_FEEDRATE_MM_M { (50*60), (50*60), (4*60), (50*60) }
+#endif
 
 // Validate that endstops are triggered on homing moves
 #define VALIDATE_HOMING_ENDSTOPS
